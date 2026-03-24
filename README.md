@@ -13,6 +13,7 @@ if [[ "\$2" == "up" && \("\$CURRENT_SSID" == "BITS-STUDENT" || "\$CURRENT_SSID" 
 fi
 EOF
 ```
+then make it executable:
 
 ```bash
 sudo chmod +x /etc/NetworkManager/dispatcher.d/90-fortinet-login
