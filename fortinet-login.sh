@@ -3,14 +3,16 @@
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
 
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
-CREDS_FILE="$(dirname "$0")/creds.conf"
+CREDS_FILE="$(dirname "$(readlink -f "$0")")/creds.conf"
 PORTAL="https://fw.bits-pilani.ac.in:8090"
 SSID="$(nmcli -t -f active,ssid dev wifi | grep '^yes' | cut -d: -f2)"
+COOKIE_FILE="/tmp/fortinet_cookies_$(id -u).txt"
 
 if [[ ! -f "$CREDS_FILE" ]]; then
     log "ERROR: Credentials file not found at $CREDS_FILE"
     exit 1
 fi
+chmod 600 "$CREDS_FILE" 2>/dev/null
 source "$CREDS_FILE"
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -21,7 +23,7 @@ is_logged_in() {
 }
 
 get_magic_token() {
-    curl -c /tmp/fortinet_cookies.txt -b /tmp/fortinet_cookies.txt -skL \
+    curl -c "$COOKIE_FILE" -b "$COOKIE_FILE" -skL \
         --max-time 10 -i "http://detectportal.firefox.com/canonical.html" \
         | grep -m 1 -ioP 'fgtauth\?\K[a-f0-9]+'
 }
@@ -38,13 +40,13 @@ login() {
     log "Got magic token: $magic"
 
     # Emulate browser: GET the form page to initialize session server-side
-    curl -c /tmp/fortinet_cookies.txt -b /tmp/fortinet_cookies.txt -skL \
+    curl -c "$COOKIE_FILE" -b "$COOKIE_FILE" -skL \
          "${PORTAL}/fgtauth?${magic}" -o /dev/null
 
     # Emulate browser: Submit the form to / (exactly as the form action="/" specifies)
     log "Submitting credentials..."
     local post_resp
-    post_resp=$(curl -c /tmp/fortinet_cookies.txt -b /tmp/fortinet_cookies.txt -sk \
+    post_resp=$(curl -c "$COOKIE_FILE" -b "$COOKIE_FILE" -sk \
         -X POST \
         "${PORTAL}/" \
         --data-urlencode "username=${USERNAME}" \
@@ -58,11 +60,11 @@ login() {
 
     if [[ -n "$keepalive" ]]; then
         log "Credentials accepted! Found keepalive logic, activating connection..."
-        curl -c /tmp/fortinet_cookies.txt -b /tmp/fortinet_cookies.txt -skL \
+        curl -c "$COOKIE_FILE" -b "$COOKIE_FILE" -skL \
             "${PORTAL}/keepalive?${keepalive}" -o /dev/null
     else
         log "Warning: No keepalive redirect found. Fortinet might have rejected the login."
-        echo "$post_resp" > /tmp/fortinet_error.html
+        echo "$post_resp" > "/tmp/fortinet_error_$(id -u).html"
     fi
 
     sleep 2
