@@ -21,9 +21,8 @@ is_logged_in() {
 }
 
 get_magic_token() {
-    # Fetch headers (-i) and body, follow redirects (-L) instead of dropping them
-    # grep extracts the token part from the fgtauth URL anywhere in the response
-    curl -skL --max-time 10 -i "http://detectportal.firefox.com/canonical.html" \
+    curl -c /tmp/fortinet_cookies.txt -b /tmp/fortinet_cookies.txt -skL \
+        --max-time 10 -i "http://detectportal.firefox.com/canonical.html" \
         | grep -m 1 -ioP 'fgtauth\?\K[a-f0-9]+'
 }
 
@@ -38,14 +37,33 @@ login() {
 
     log "Got magic token: $magic"
 
-    curl -sk --max-time 10 \
+    # Emulate browser: GET the form page to initialize session server-side
+    curl -c /tmp/fortinet_cookies.txt -b /tmp/fortinet_cookies.txt -skL \
+         "${PORTAL}/fgtauth?${magic}" -o /dev/null
+
+    # Emulate browser: Submit the form to / (exactly as the form action="/" specifies)
+    log "Submitting credentials..."
+    local post_resp
+    post_resp=$(curl -c /tmp/fortinet_cookies.txt -b /tmp/fortinet_cookies.txt -sk \
         -X POST \
         "${PORTAL}/" \
         --data-urlencode "username=${USERNAME}" \
         --data-urlencode "password=${PASSWORD}" \
         --data "magic=${magic}" \
-        --data "4Tredir=http://detectportal.firefox.com/canonical.html" \
-        -o /dev/null
+        --data "4Tredir=http://detectportal.firefox.com/canonical.html")
+
+    # Emulate browser: Follow the JavaScript redirect to the keepalive endpoint
+    local keepalive
+    keepalive=$(echo "$post_resp" | grep -m 1 -ioP 'keepalive\?\K[a-f0-9]+')
+
+    if [[ -n "$keepalive" ]]; then
+        log "Credentials accepted! Found keepalive logic, activating connection..."
+        curl -c /tmp/fortinet_cookies.txt -b /tmp/fortinet_cookies.txt -skL \
+            "${PORTAL}/keepalive?${keepalive}" -o /dev/null
+    else
+        log "Warning: No keepalive redirect found. Fortinet might have rejected the login."
+        echo "$post_resp" > /tmp/fortinet_error.html
+    fi
 
     sleep 2
 
