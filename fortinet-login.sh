@@ -21,12 +21,10 @@ is_logged_in() {
 }
 
 get_magic_token() {
-    # Follow redirect from plain HTTP, extract magic token from fgtauth URL
-    curl -sk --max-time 10 \
-        -o /dev/null \
-        -w "%{redirect_url}" \
-        "http://detectportal.firefox.com/canonical.html" \
-        | grep -oP '(?<=fgtauth\?)[a-f0-9]+'
+    # Fetch headers (-i) and body, follow redirects (-L) instead of dropping them
+    # grep extracts the token part from the fgtauth URL anywhere in the response
+    curl -skL --max-time 10 -i "http://detectportal.firefox.com/canonical.html" \
+        | grep -m 1 -ioP 'fgtauth\?\K[a-f0-9]+'
 }
 
 login() {
