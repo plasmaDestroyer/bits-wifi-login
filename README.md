@@ -62,7 +62,7 @@ NetworkManager will only run files inside `/etc/NetworkManager/dispatcher.d/` if
 sudo chmod +x /etc/NetworkManager/dispatcher.d/90-fortinet-login
 ```
 
-You are done! The next time you visit campus and connect to `BITS-STUDENT`, you will be seamlessly logged into the internet within 5 seconds without ever opening a browser.
+You are done! The next time you visit campus and connect to `BITS-STUDENT` (or `BITS-STAFF` - which are actually just the same 😉), you will be seamlessly logged into the internet within 5 seconds without ever opening a browser.
 
 ---
 
