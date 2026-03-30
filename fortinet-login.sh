@@ -17,15 +17,18 @@ source "$CREDS_FILE"
 # ──────────────────────────────────────────────────────────────────────────────
 
 is_logged_in() {
-    local body
-    body=$(curl -sk --max-time 5 "http://detectportal.firefox.com/canonical.html")
-    [[ "$body" == *"success"* ]]
+    local code
+    code=$(curl -sk --max-time 5 -o /dev/null -w "%{http_code}" \
+        "http://connectivitycheck.gstatic.com/generate_204")
+    [[ "$code" == "204" ]]
 }
 
 get_magic_token() {
-    curl -c "$COOKIE_FILE" -b "$COOKIE_FILE" -skL \
-        --max-time 10 -i "http://detectportal.firefox.com/canonical.html" \
-        | grep -m 1 -ioP 'fgtauth\?\K[a-f0-9]+'
+    curl -sk --max-time 10 \
+        -o /dev/null \
+        -w "%{redirect_url}" \
+        "http://connectivitycheck.gstatic.com/generate_204" \
+        | grep -oP '(?<=fgtauth\?)[a-f0-9]+'
 }
 
 login() {
@@ -86,7 +89,14 @@ main() {
     fi
 
     log "Not logged in. Authenticating to ${SSID}..."
-    login
+
+    for attempt in 1 2; do
+        log "Attempt ${attempt}/2..."
+        login && exit 0
+        sleep 3
+    done
+
+    log "✗ All attempts failed."
+    exit 1
 }
 
-main
