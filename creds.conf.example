@@ -1,0 +1,3 @@
+# creds.conf.example
+USERNAME="your_bits_username"
+PASSWORD="your_bits_password"
