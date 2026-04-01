@@ -8,20 +8,20 @@ There are automated install scripts for Linux, macOS, and Windows. To install ju
 
 ### 🐧 Linux
 ```bash
-curl -fsSL https://raw.githubusercontent.com/plasmaDestroyer/bits-wifi-login/main/linux/remote-install.sh | bash
+curl -fsSL https://plasmaDestroyer.github.io/bits-wifi-login/linux/remote-install.sh | bash
 ```
 *Requires NetworkManager. Sets up a NetworkManager dispatcher and a systemd background service.*
 
 ### 🍎 macOS
 ```bash
-curl -fsSL https://raw.githubusercontent.com/plasmaDestroyer/bits-wifi-login/main/mac/remote-install.sh | bash
+curl -fsSL https://plasmaDestroyer.github.io/bits-wifi-login/mac/remote-install.sh | bash
 ```
 *Sets up a background launchd agent that watches for Wi-Fi changes.*
 
 ### 🪟 Windows
 Open PowerShell as Administrator and run:
 ```powershell
-irm https://raw.githubusercontent.com/plasmaDestroyer/bits-wifi-login/main/windows/remote-install.ps1 | iex
+irm https://plasmaDestroyer.github.io/bits-wifi-login/windows/remote-install.ps1 | iex
 ```
 *Registers a scheduled task that triggers on network connect.*
 
