@@ -1,75 +1,55 @@
 # BITS Wifi Auto-Login Script
 
-This script automatically logs you into the BITS Pilani Fortinet Captive Portal (`BITS-STUDENT` and `BITS-STAFF` Wi-Fi networks) completely in the background the moment your device connects to the network.
+This script automatically logs you into the BITS Pilani Fortinet Captive Portal (`BITS-STUDENT` & `BITS-STAFF` Wi-Fi networks) in the background when your device connects to the network.
 
 ## ⚙️ Installation & Setup
 
-Follow these exact steps to set up the auto-login system.
+There are automated install scripts for Linux, macOS, and Windows. They will prompt you for your BITS Wifi username and password to create a `creds.conf` file, and set up all the background triggers for your OS. To install just run one command based on your OS:
 
-### 1. Clone the Repository
-Open your terminal and clone the script to your machine:
+### 🐧 Linux
 ```bash
-git clone https://github.com/plasmaDestroyer/bits-wifi-login.git
-cd bits-wifi-login
+git clone https://github.com/plasmaDestroyer/bits-wifi-login.git && cd bits-wifi-login && ./linux/install.sh
+```
+*Requires NetworkManager. Sets up a NetworkManager dispatcher and a systemd background service.*
+
+### 🍎 macOS
+```bash
+git clone https://github.com/plasmaDestroyer/bits-wifi-login.git && cd bits-wifi-login && ./mac/install.sh
+```
+*Sets up a background launchd agent that watches for Wi-Fi changes.*
+
+### 🪟 Windows
+
+Run in PowerShell (as Administrator).
+
+**If you have Git installed** (check by running):
+```powershell
+git --version
+```
+If it returns something like `git version 2.x.x`, then run:
+```powershell
+git clone https://github.com/plasmaDestroyer/bits-wifi-login.git; cd bits-wifi-login; .\windows\install.ps1
 ```
 
-### 2. Set Up Your Credentials (`creds.conf`)
-The script needs your BITS username and password to log you in. These must be stored in a file named `creds.conf` in the exact same directory as the `fortinet-login.sh` script.
-
-Create a file named `creds.conf` inside the `bits-wifi-login` directory:
-```bash
-touch creds.conf
-```
-Open `creds.conf` in your favorite text editor and exactly add your BITS username and password like this:
-```bash
-USERNAME="f20XXXXXXXXX"
-PASSWORD="your_password_here"
-```
-*(Make sure not to commit this file to GitHub! The repo already contains a `.gitignore` ignoring `.conf` files.)*
-
-**🔒 Security Note:** Because this file contains your password, you should ensure no other users on your computer can read it:
-```bash
-chmod 600 creds.conf
+**If you don't have Git:**
+```powershell
+Invoke-WebRequest https://github.com/plasmaDestroyer/bits-wifi-login/archive/refs/heads/main.zip -OutFile bits-wifi-login.zip; Expand-Archive bits-wifi-login.zip -DestinationPath .; cd bits-wifi-login-main; .\windows\install.ps1
 ```
 
-### 3. Make the Script Executable
-Give execution permissions to the main script so your system can run it:
-```bash
-chmod +x fortinet-login.sh
-```
+*Registers a scheduled task that triggers instantly when you connect to a network.*
 
-### 4. Create the NetworkManager Dispatcher Script
-To make it run automatically every time your Wi-Fi connects, we will tell NetworkManager to trigger it on "up" events for the specific BITS Wi-Fi SSIDs.
+## 💤 Post-Installation
 
-Run this entire block exactly as it is in your terminal (while still inside the `bits-wifi-login` directory). It uses `$(pwd)` to automatically bake your current folder's absolute path into the script:
+The installer creates a local `creds.conf` file for you. If you ever change your password or need to fix a typo, you can just edit that file directly.
 
-```bash
-sudo tee /etc/NetworkManager/dispatcher.d/90-fortinet-login > /dev/null << EOF
-#!/usr/bin/env bash
+That's it. From now on, whenever your device connects to `BITS-STUDENT` (or `BITS-STAFF` - they're essentially the same thing - in case you didn't know), you'll be logged in automatically without needing the Browser Captive Portal.
 
-CURRENT_SSID=\$(nmcli -t -f active,ssid dev wifi | grep '^yes' | cut -d: -f2)
+## 💡 Good to know
 
-if [[ "\$2" == "up" && ( "\$CURRENT_SSID" == "BITS-STUDENT" || "\$CURRENT_SSID" == "BITS-STAFF" ) ]]; then
-    sleep 3
-    su -c "$(pwd)/fortinet-login.sh >> /tmp/fortinet-login-\$(id -u).log 2>&1 &" $(whoami)
-fi
-EOF
-```
+*   **Linux:** Fully tested and works like a charm (I use Arch btw 😉).
+*   **macOS:** Should work well since it's essentially the same as linux.
+*   **Windows:** Added recently, it should work great, though I haven't used it much as compared to linux.
+*   **Issues?** If facing any issues, feel free to reach out to me or [open an issue on GitHub](https://github.com/plasmaDestroyer/bits-wifi-login/issues).
 
-### 5. Make the Dispatcher Executable
-NetworkManager will only run files inside `/etc/NetworkManager/dispatcher.d/` if they are executable by root:
-```bash
-sudo chmod +x /etc/NetworkManager/dispatcher.d/90-fortinet-login
-```
 
-You are done! The next time you visit campus and connect to `BITS-STUDENT` (or `BITS-STAFF` - which are actually just the same 😉), you will be seamlessly logged into the internet within 5 seconds without ever opening a browser.
-
----
-
-## 🐛 Temporary Files & Debugging
-
-The script specifically uses unique temporary files anchored to your user ID (`$(id -u)`) stored in your `/tmp/` directory to manage cookies securely and preserve logs safely. All of these files are automatically deleted by Linux every time you restart your computer.
-
-* **`/tmp/fortinet-login-$(id -u).log`**: The main log file that tracks every time the script runs (e.g., *[19:30:52] ✓ Login successful!*). Use `cat /tmp/fortinet-login-$(id -u).log` to check output if it stops working.
-* **`/tmp/fortinet_cookies_$(id -u).txt`**: Fortinet requires a persistent browser session to link the login page request with the credentials POST form. This file safely stores that temporary web cookie for `curl`.
-* **`/tmp/fortinet_error_$(id -u).html`**: If Fortinet rejects your login or expects a specific form field we missed, the script dumps the HTML of the rejection page here so you can read exactly what went wrong.
+#### **Cheers 🍻**
