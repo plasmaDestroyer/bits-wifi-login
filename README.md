@@ -4,43 +4,30 @@ This script automatically logs you into the BITS Pilani Fortinet Captive Portal 
 
 ## ⚙️ Installation & Setup
 
-There are automated install scripts for Linux, macOS, and Windows. They will prompt you for your BITS Wifi username and password to create a `creds.conf` file, and set up all the background triggers for your OS. To install just run one command based on your OS:
+There are automated install scripts for Linux, macOS, and Windows. To install just run one command based on your OS:
 
 ### 🐧 Linux
 ```bash
-git clone https://github.com/plasmaDestroyer/bits-wifi-login.git && cd bits-wifi-login && ./linux/install.sh
+curl -fsSL https://raw.githubusercontent.com/plasmaDestroyer/bits-wifi-login/main/linux/remote-install.sh | bash
 ```
 *Requires NetworkManager. Sets up a NetworkManager dispatcher and a systemd background service.*
 
 ### 🍎 macOS
 ```bash
-git clone https://github.com/plasmaDestroyer/bits-wifi-login.git && cd bits-wifi-login && ./mac/install.sh
+curl -fsSL https://raw.githubusercontent.com/plasmaDestroyer/bits-wifi-login/main/mac/remote-install.sh | bash
 ```
 *Sets up a background launchd agent that watches for Wi-Fi changes.*
 
 ### 🪟 Windows
-
-Run in PowerShell (as Administrator).
-
-**If you have Git installed** (check by running):
+Open PowerShell as Administrator and run:
 ```powershell
-git --version
+irm https://raw.githubusercontent.com/plasmaDestroyer/bits-wifi-login/main/windows/remote-install.ps1 | iex
 ```
-If it returns something like `git version 2.x.x`, then run:
-```powershell
-git clone https://github.com/plasmaDestroyer/bits-wifi-login.git; cd bits-wifi-login; .\windows\install.ps1
-```
+*Registers a scheduled task that triggers on network connect.*
 
-**If you don't have Git:**
-```powershell
-Invoke-WebRequest https://github.com/plasmaDestroyer/bits-wifi-login/archive/refs/heads/main.zip -OutFile bits-wifi-login.zip; Expand-Archive bits-wifi-login.zip -DestinationPath .; cd bits-wifi-login-main; .\windows\install.ps1
-```
-
-*Registers a scheduled task that triggers instantly when you connect to a network.*
+After installation, it will prompt you for your BITS Wifi username and password to create a `creds.conf` file, and set up all the background triggers for your OS. If you ever change your password or need to fix a typo, you can just edit that file directly.
 
 ## 💤 Post-Installation
-
-The installer creates a local `creds.conf` file for you. If you ever change your password or need to fix a typo, you can just edit that file directly.
 
 That's it. From now on, whenever your device connects to `BITS-STUDENT` (or `BITS-STAFF` - they're essentially the same thing - in case you didn't know), you'll be logged in automatically without needing the Browser Captive Portal.
 
