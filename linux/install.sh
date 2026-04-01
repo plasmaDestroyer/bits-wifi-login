@@ -24,8 +24,8 @@ fi
 
 if [[ ! -f "${SCRIPT_DIR}/creds.conf" ]]; then
     log "No creds.conf found. Let's create one."
-    read -rp "Enter your BITS username: " input_user
-    read -rsp "Enter your BITS password: " input_pass
+    read -rp "Enter your BITS username: " input_user </dev/tty
+    read -rsp "Enter your BITS password: " input_pass </dev/tty
     echo ""
     cat > "${SCRIPT_DIR}/creds.conf" << EOF
 USERNAME="${input_user}"
