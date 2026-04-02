@@ -55,6 +55,22 @@ EOF
 sudo chmod +x /etc/NetworkManager/dispatcher.d/90-fortinet-login
 log "✓ NetworkManager dispatcher installed."
 
+# ── Suspend/resume hook ───────────────────────────────────────────────────────
+
+sudo tee /usr/lib/systemd/system-sleep/bits-wifi-login > /dev/null << EOF
+#!/usr/bin/env bash
+# Re-authenticate after waking from suspend (session expires after ~4 hrs)
+if [[ "\$1" == "post" ]]; then
+    sleep 5  # give NetworkManager time to reconnect
+    CURRENT_SSID=\$(nmcli -t -f active,ssid dev wifi 2>/dev/null | grep '^yes' | cut -d: -f2)
+    if [[ "\$CURRENT_SSID" == "BITS-STUDENT" || "\$CURRENT_SSID" == "BITS-STAFF" ]]; then
+        su -c "${SCRIPT_PATH} >> /tmp/fortinet-login.log 2>&1 &" ${USERNAME}
+    fi
+fi
+EOF
+sudo chmod +x /usr/lib/systemd/system-sleep/bits-wifi-login
+log "✓ Suspend/resume hook installed."
+
 # ── systemd service ───────────────────────────────────────────────────────────
 
 sudo tee /etc/systemd/system/bits-wifi-login.service > /dev/null << EOF
@@ -78,6 +94,7 @@ Description=BITS WiFi Login periodic check
 [Timer]
 OnBootSec=30s
 OnUnitActiveSec=30min
+Persistent=true
 
 [Install]
 WantedBy=timers.target
@@ -97,7 +114,8 @@ echo "✓ Installation complete."
 echo ""
 echo "  Triggers:"
 echo "    - Every WiFi connect to BITS-STUDENT (NM dispatcher)"
-echo "    - Every 30 minutes (systemd timer)"
+echo "    - Every resume from suspend/sleep (system-sleep hook)"
+echo "    - Every 30 minutes (systemd timer, persistent across sleep)"
 echo ""
 echo "  Logs:"
 echo "    journalctl -u bits-wifi-login.service --since today"

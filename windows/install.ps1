@@ -51,6 +51,7 @@ $action = New-ScheduledTaskAction `
     -Argument "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$LoginScript`""
 
 $bootTrigger = New-ScheduledTaskTrigger -AtStartup
+$bootTrigger.Repetition.Interval = "PT30M"
 $loginTrigger = New-ScheduledTaskTrigger -AtLogOn
 
 $settings = New-ScheduledTaskSettingsSet `
@@ -83,6 +84,10 @@ $fullTaskXml = @"
     <EventTrigger>
       <Subscription>&lt;QueryList&gt;&lt;Query Id="0" Path="Microsoft-Windows-NetworkProfile/Operational"&gt;&lt;Select Path="Microsoft-Windows-NetworkProfile/Operational"&gt;*[System[EventID=10000]]&lt;/Select&gt;&lt;/Query&gt;&lt;/QueryList&gt;</Subscription>
       <Delay>PT3S</Delay>
+    </EventTrigger>
+    <EventTrigger>
+      <Subscription>&lt;QueryList&gt;&lt;Query Id="0" Path="System"&gt;&lt;Select Path="System"&gt;*[System[Provider[@Name='Microsoft-Windows-Power-Troubleshooter'] and EventID=1]]&lt;/Select&gt;&lt;/Query&gt;&lt;/QueryList&gt;</Subscription>
+      <Delay>PT5S</Delay>
     </EventTrigger>
   </Triggers>
   <Actions>
@@ -120,6 +125,8 @@ Log "[OK] Network connect trigger registered."
 Write-Host "`n[DONE] Installation complete.`n"
 Write-Host "  Triggers:"
 Write-Host "    - Every WiFi connect (Event ID 10000)"
+Write-Host "    - Every resume from sleep (Power-Troubleshooter Event ID 1)"
+Write-Host "    - Every 30 minutes (Interval repeating task)"
 Write-Host "    - On boot and login"
 Write-Host "`n  Logs:"
 Write-Host "    Get-EventLog -LogName Application -Source 'BITS-WiFi-Login' -Newest 20"
