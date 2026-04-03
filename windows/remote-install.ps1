@@ -20,23 +20,26 @@ Write-Host ""
 Write-Host "=== BITS WiFi Auto-Login Installer ===" -ForegroundColor Cyan
 Write-Host ""
 
-# ── Download ──────────────────────────────────────────────────────────────────
-Write-Host "[1/3] Downloading..." -ForegroundColor Cyan
-Invoke-WebRequest $ZipUrl -OutFile $ZipFile
+try {
+    # ── Download ──────────────────────────────────────────────────────────────
+    Write-Host "[1/3] Downloading..." -ForegroundColor Cyan
+    Invoke-WebRequest -Uri $ZipUrl -OutFile $ZipFile
 
-# ── Extract ───────────────────────────────────────────────────────────────────
-Write-Host "[2/3] Extracting..." -ForegroundColor Cyan
+    # ── Extract ───────────────────────────────────────────────────────────────
+    Write-Host "[2/3] Extracting..." -ForegroundColor Cyan
 
-# Clean up any previous install/extraction
-if (Test-Path $ExtractedDir) { Remove-Item $ExtractedDir -Recurse -Force }
-if (Test-Path $InstallDir) { Remove-Item $InstallDir -Recurse -Force }
+    if (Test-Path $ExtractedDir) { Remove-Item $ExtractedDir -Recurse -Force }
+    if (Test-Path $InstallDir) { Remove-Item $InstallDir -Recurse -Force }
 
-Expand-Archive $ZipFile -DestinationPath $env:TEMP -Force
-Move-Item $ExtractedDir $InstallDir
-Remove-Item $ZipFile -Force
+    Expand-Archive -Path $ZipFile -DestinationPath $env:TEMP -Force
+    Move-Item $ExtractedDir $InstallDir
 
-# ── Run installer ─────────────────────────────────────────────────────────────
-Write-Host "[3/3] Setting up..." -ForegroundColor Cyan
-Write-Host ""
+    # ── Run installer ─────────────────────────────────────────────────────────
+    Write-Host "[3/3] Setting up..." -ForegroundColor Cyan
+    Write-Host ""
 
-powershell -ExecutionPolicy Bypass -File "$InstallDir\windows\install.ps1"
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$InstallDir\windows\install.ps1"
+} finally {
+    Remove-Item $ZipFile -Force -ErrorAction SilentlyContinue
+    Remove-Item $ExtractedDir -Recurse -Force -ErrorAction SilentlyContinue
+}
