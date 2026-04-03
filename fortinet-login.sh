@@ -3,9 +3,24 @@
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
 
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
-CREDS_FILE="$(dirname "$(readlink -f "$0")")/creds.conf"
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+else
+    SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+fi
+CREDS_FILE="${SCRIPT_DIR}/creds.conf"
 PORTAL="https://fw.bits-pilani.ac.in:8090"
-SSID="$(nmcli -t -f active,ssid dev wifi | grep '^yes' | cut -d: -f2)"
+
+if command -v nmcli >/dev/null 2>&1; then
+    SSID="$(nmcli -t -f active,ssid dev wifi 2>/dev/null | grep '^yes' | cut -d: -f2)"
+elif command -v networksetup >/dev/null 2>&1; then
+    # Get macOS Wi-Fi interface (typically en0) and extract active network
+    WIFI_IFACE="$(networksetup -listallhardwareports 2>/dev/null | awk '/Wi-Fi|AirPort/{getline; print $NF}')"
+    SSID="$(networksetup -getairportnetwork "$WIFI_IFACE" 2>/dev/null | awk -F': ' '{print $2}')"
+else
+    SSID="Unknown"
+fi
+
 COOKIE_FILE="/tmp/fortinet_cookies_$(id -u).txt"
 
 # Set strict permissions for newly created sensitive files (cookies, error logs)
@@ -29,16 +44,16 @@ is_logged_in() {
 get_magic_token() {
     local magic
     # 1. Try captive portal redirect URL
-    magic=$(curl -sk --max-time 10 -o /dev/null -w "%{redirect_url}" "http://connectivitycheck.gstatic.com/generate_204" | grep -oP '(?<=fgtauth\?)[a-f0-9]+' || true)
+    magic=$(curl -sk --max-time 10 -o /dev/null -w "%{redirect_url}" "http://connectivitycheck.gstatic.com/generate_204" | grep -ioE 'fgtauth\?[a-f0-9]+' | cut -d? -f2 || true)
 
     # 2. Try HTML body of the intercept page (if Fortinet returns 200 OK + meta refresh)
     if [[ -z "$magic" ]]; then
-        magic=$(curl -sk --max-time 10 "http://connectivitycheck.gstatic.com/generate_204" | grep -oP '(?:magic=|fgtauth\?)\K[a-f0-9]+' | head -n 1 || true)
+        magic=$(curl -sk --max-time 10 "http://connectivitycheck.gstatic.com/generate_204" | grep -ioE '(magic=|fgtauth\?)[a-f0-9]+' | head -n 1 | awk -F'[?=]' '{print $2}' || true)
     fi
 
     # 3. Fallback: Hit the portal directly and scrape the hidden input value
     if [[ -z "$magic" ]]; then
-        magic=$(curl -sk --max-time 10 "${PORTAL}/" | grep -ioP 'name="magic"\s+value="\K[a-f0-9]+' | head -n 1 || true)
+        magic=$(curl -sk --max-time 10 "${PORTAL}/" | grep -ioE 'name="magic"[[:space:]]+value="?[a-f0-9]+' | grep -ioE '[a-f0-9]+$' | head -n 1 || true)
     fi
 
     echo "$magic"
@@ -72,7 +87,7 @@ login() {
 
     # Emulate browser: Follow the JavaScript redirect to the keepalive endpoint
     local keepalive
-    keepalive=$(echo "$post_resp" | grep -m 1 -ioP 'keepalive\?\K[a-f0-9]+')
+    keepalive=$(echo "$post_resp" | grep -m 1 -ioE 'keepalive\?[a-f0-9]+' | cut -d? -f2)
 
     if [[ -n "$keepalive" ]]; then
         log "Credentials accepted! Found keepalive logic, activating connection..."

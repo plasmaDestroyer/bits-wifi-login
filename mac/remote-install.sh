@@ -5,26 +5,25 @@
 set -e
 
 INSTALL_DIR="$HOME/.local/share/bits-wifi-login"
-ZIP_URL="https://github.com/plasmaDestroyer/bits-wifi-login/archive/refs/heads/main.zip"
-TMP_ZIP="/tmp/bits-wifi-login.zip"
+TAR_URL="https://github.com/plasmaDestroyer/bits-wifi-login/archive/refs/heads/main.tar.gz"
 
 echo ""
 echo "=== BITS WiFi Auto-Login Installer (macOS) ==="
 echo ""
 
-# ── Download ──────────────────────────────────────────────────────────────────
-echo "[1/3] Downloading..."
-curl -fsSL "$ZIP_URL" -o "$TMP_ZIP"
+# ── Download & Extract ────────────────────────────────────────────────────────
+echo "[1/2] Downloading & Extracting..."
+TMP_DIR=$(mktemp -d)
+trap 'rm -rf "$TMP_DIR"' EXIT
 
-# ── Extract ───────────────────────────────────────────────────────────────────
-echo "[2/3] Extracting..."
+curl -fsSL "$TAR_URL" | tar -xz -C "$TMP_DIR"
+
+mkdir -p "$(dirname "$INSTALL_DIR")"
 rm -rf "$INSTALL_DIR"
-unzip -qo "$TMP_ZIP" -d /tmp
-mv /tmp/bits-wifi-login-main "$INSTALL_DIR"
-rm -f "$TMP_ZIP"
+mv "$TMP_DIR/bits-wifi-login-main" "$INSTALL_DIR"
 
 # ── Run installer ─────────────────────────────────────────────────────────────
-echo "[3/3] Setting up..."
+echo "[2/2] Setting up..."
 echo ""
 chmod +x "$INSTALL_DIR/mac/install.sh"
 exec "$INSTALL_DIR/mac/install.sh"

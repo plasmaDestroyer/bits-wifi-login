@@ -14,11 +14,11 @@ echo ""
 # ── Download & Extract ────────────────────────────────────────────────────────
 echo "[1/2] Downloading & Extracting..."
 TMP_DIR=$(mktemp -d)
-# Ensure temporary directory is cleaned up
 trap 'rm -rf "$TMP_DIR"' EXIT
 
 curl -fsSL "$TAR_URL" | tar -xz -C "$TMP_DIR"
 
+mkdir -p "$(dirname "$INSTALL_DIR")"
 rm -rf "$INSTALL_DIR"
 mv "$TMP_DIR/bits-wifi-login-main" "$INSTALL_DIR"
 

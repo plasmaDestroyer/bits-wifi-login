@@ -27,10 +27,10 @@ if [[ ! -f "${SCRIPT_DIR}/creds.conf" ]]; then
     read -rp "Enter your BITS username: " input_user </dev/tty
     read -rsp "Enter your BITS password: " input_pass </dev/tty
     echo ""
-    cat > "${SCRIPT_DIR}/creds.conf" << EOF
-USERNAME="${input_user}"
-PASSWORD="${input_pass}"
-EOF
+    {
+        printf "USERNAME='%s'\n" "${input_user//\'/\'\\\'\'}"
+        printf "PASSWORD='%s'\n" "${input_pass//\'/\'\\\'\'}"
+    } > "${SCRIPT_DIR}/creds.conf"
     chmod 600 "${SCRIPT_DIR}/creds.conf"
     log "✓ creds.conf created."
 else
