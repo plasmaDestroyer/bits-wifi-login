@@ -83,7 +83,7 @@ login() {
         --data-urlencode "username=${USERNAME}" \
         --data-urlencode "password=${PASSWORD}" \
         --data "magic=${magic}" \
-        --data "4Tredir=http://detectportal.firefox.com/canonical.html")
+        --data "4Tredir=http://connectivitycheck.gstatic.com/generate_204")
 
     # Emulate browser: Follow the JavaScript redirect to the keepalive endpoint
     local keepalive
@@ -129,4 +129,3 @@ main() {
 }
 
 main
-
