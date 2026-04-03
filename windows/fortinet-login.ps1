@@ -26,11 +26,25 @@ function Is-LoggedIn {
 }
 
 function Get-MagicToken {
+    # 1. Try captive portal redirect URL
     $redirect = curl.exe -sk --max-time 10 -o NUL -w "%{redirect_url}" $CHECK_URL
     Log "Debug: Redirect URL received: $redirect"
-    
     if ($redirect -match 'magic=([a-f0-9]+)') { return $Matches[1] }
     if ($redirect -match 'fgtauth\?([a-f0-9]+)') { return $Matches[1] }
+
+    # 2. Try HTML body of the intercept page (if Fortinet returns 200 OK without location headers)
+    Log "Debug: No redirect header found, checking HTML body..."
+    $body = curl.exe -sk --max-time 10 $CHECK_URL
+    if ($body -match 'magic=([a-f0-9]+)') { return $Matches[1] }
+    if ($body -match 'fgtauth\?([a-f0-9]+)') { return $Matches[1] }
+
+    # 3. Fallback: Hit the portal directly and scrape the hidden input value
+    Log "Debug: Still no magic token, querying portal directly..."
+    $portalBody = curl.exe -sk --max-time 10 "${PORTAL}/"
+    if ($portalBody -match 'name="magic"\s+value="([a-f0-9]+)"') {
+        return $Matches[1]
+    }
+
     return $null
 }
 

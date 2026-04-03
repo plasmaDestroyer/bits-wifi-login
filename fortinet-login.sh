@@ -24,11 +24,21 @@ is_logged_in() {
 }
 
 get_magic_token() {
-    curl -sk --max-time 10 \
-        -o /dev/null \
-        -w "%{redirect_url}" \
-        "http://connectivitycheck.gstatic.com/generate_204" \
-        | grep -oP '(?<=fgtauth\?)[a-f0-9]+'
+    local magic
+    # 1. Try captive portal redirect URL
+    magic=$(curl -sk --max-time 10 -o /dev/null -w "%{redirect_url}" "http://connectivitycheck.gstatic.com/generate_204" | grep -oP '(?<=fgtauth\?)[a-f0-9]+' || true)
+
+    # 2. Try HTML body of the intercept page (if Fortinet returns 200 OK + meta refresh)
+    if [[ -z "$magic" ]]; then
+        magic=$(curl -sk --max-time 10 "http://connectivitycheck.gstatic.com/generate_204" | grep -oP '(?:magic=|fgtauth\?)\K[a-f0-9]+' | head -n 1 || true)
+    fi
+
+    # 3. Fallback: Hit the portal directly and scrape the hidden input value
+    if [[ -z "$magic" ]]; then
+        magic=$(curl -sk --max-time 10 "${PORTAL}/" | grep -ioP 'name="magic"\s+value="\K[a-f0-9]+' | head -n 1 || true)
+    fi
+
+    echo "$magic"
 }
 
 login() {
