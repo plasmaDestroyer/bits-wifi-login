@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # BITS WiFi Login - Remote Installer (macOS)
-# Usage: curl -fsSL https://raw.githubusercontent.com/plasmaDestroyer/bits-wifi-login/main/mac/remote-install.sh | bash
+# Usage: curl -fsSL https://plasmaDestroyer.github.io/bits-wifi-login/mac/remote-install.sh | bash
 
 set -e
 

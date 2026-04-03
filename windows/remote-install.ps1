@@ -1,5 +1,5 @@
 # ── BITS WiFi Login - Remote Installer ────────────────────────────────────────
-# Usage: irm https://raw.githubusercontent.com/plasmaDestroyer/bits-wifi-login/main/windows/remote-install.ps1 | iex
+# Usage: irm https://plasmaDestroyer.github.io/bits-wifi-login/windows/remote-install.ps1 | iex
 
 $ErrorActionPreference = "Stop"
 
