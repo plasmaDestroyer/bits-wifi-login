@@ -8,6 +8,9 @@ PORTAL="https://fw.bits-pilani.ac.in:8090"
 SSID="$(nmcli -t -f active,ssid dev wifi | grep '^yes' | cut -d: -f2)"
 COOKIE_FILE="/tmp/fortinet_cookies_$(id -u).txt"
 
+# Set strict permissions for newly created sensitive files (cookies, error logs)
+umask 077
+
 if [[ ! -f "$CREDS_FILE" ]]; then
     log "ERROR: Credentials file not found at $CREDS_FILE"
     exit 1

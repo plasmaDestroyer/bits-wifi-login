@@ -27,10 +27,8 @@ if [[ ! -f "${SCRIPT_DIR}/creds.conf" ]]; then
     read -rp "Enter your BITS username: " input_user </dev/tty
     read -rsp "Enter your BITS password: " input_pass </dev/tty
     echo ""
-    cat > "${SCRIPT_DIR}/creds.conf" << EOF
-USERNAME="${input_user}"
-PASSWORD="${input_pass}"
-EOF
+    printf "USERNAME=%q\n" "$input_user" > "${SCRIPT_DIR}/creds.conf"
+    printf "PASSWORD=%q\n" "$input_pass" >> "${SCRIPT_DIR}/creds.conf"
     chmod 600 "${SCRIPT_DIR}/creds.conf"
     log "✓ creds.conf created."
 else
@@ -47,9 +45,9 @@ log "✓ Script permissions set."
 sudo tee /etc/NetworkManager/dispatcher.d/90-fortinet-login > /dev/null << EOF
 #!/usr/bin/env bash
 CURRENT_SSID=\$(nmcli -t -f active,ssid dev wifi 2>/dev/null | grep '^yes' | cut -d: -f2)
-if [[ "\$2" == "up" && "\$CURRENT_SSID" == "BITS-STUDENT" ]]; then
+if [[ "\$2" == "up" ]] && [[ "\$CURRENT_SSID" =~ ^BITS-(STUDENT|STAFF)$ ]]; then
     sleep 3
-    su -c "${SCRIPT_PATH} >> /tmp/fortinet-nm.log 2>&1 &" ${USERNAME}
+    su -c "${SCRIPT_PATH} >> /tmp/fortinet-nm-${USERNAME}.log 2>&1 &" ${USERNAME}
 fi
 EOF
 sudo chmod +x /etc/NetworkManager/dispatcher.d/90-fortinet-login
@@ -57,18 +55,25 @@ log "✓ NetworkManager dispatcher installed."
 
 # ── Suspend/resume hook ───────────────────────────────────────────────────────
 
-sudo tee /usr/lib/systemd/system-sleep/bits-wifi-login > /dev/null << EOF
+# Handle differing distro paths for system-sleep
+SLEEP_DIR="/usr/lib/systemd/system-sleep"
+if [[ -d "/lib/systemd/system-sleep" && ! -d "/usr/lib/systemd/system-sleep" ]]; then
+    SLEEP_DIR="/lib/systemd/system-sleep"
+fi
+sudo mkdir -p "$SLEEP_DIR"
+
+sudo tee "$SLEEP_DIR/bits-wifi-login" > /dev/null << EOF
 #!/usr/bin/env bash
 # Re-authenticate after waking from suspend (session expires after ~4 hrs)
 if [[ "\$1" == "post" ]]; then
     sleep 5  # give NetworkManager time to reconnect
     CURRENT_SSID=\$(nmcli -t -f active,ssid dev wifi 2>/dev/null | grep '^yes' | cut -d: -f2)
-    if [[ "\$CURRENT_SSID" == "BITS-STUDENT" || "\$CURRENT_SSID" == "BITS-STAFF" ]]; then
-        su -c "${SCRIPT_PATH} >> /tmp/fortinet-login.log 2>&1 &" ${USERNAME}
+    if [[ "\$CURRENT_SSID" =~ ^BITS-(STUDENT|STAFF)$ ]]; then
+        su -c "${SCRIPT_PATH} >> /tmp/fortinet-login-${USERNAME}.log 2>&1 &" ${USERNAME}
     fi
 fi
 EOF
-sudo chmod +x /usr/lib/systemd/system-sleep/bits-wifi-login
+sudo chmod +x "$SLEEP_DIR/bits-wifi-login"
 log "✓ Suspend/resume hook installed."
 
 # ── systemd service ───────────────────────────────────────────────────────────
@@ -119,4 +124,4 @@ echo "    - Every 30 minutes (systemd timer, persistent across sleep)"
 echo ""
 echo "  Logs:"
 echo "    journalctl -u bits-wifi-login.service --since today"
-echo "    tail /tmp/fortinet-nm.log   # NM dispatcher log"
+echo "    tail /tmp/fortinet-nm-${USERNAME}.log   # NM dispatcher log"
