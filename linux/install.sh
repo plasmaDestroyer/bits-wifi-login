@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-set -e
-
 SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SCRIPT_PATH="${SCRIPT_DIR}/fortinet-login.sh"
 USERNAME="$(whoami)"
@@ -46,8 +44,17 @@ sudo tee /etc/NetworkManager/dispatcher.d/90-fortinet-login > /dev/null << EOF
 #!/usr/bin/env bash
 CURRENT_SSID=\$(nmcli -t -f active,ssid dev wifi 2>/dev/null | grep '^yes' | cut -d: -f2)
 if [[ "\$2" == "up" ]] && [[ "\$CURRENT_SSID" =~ ^BITS-(STUDENT|STAFF)$ ]]; then
-    sleep 3
-    su -c "${SCRIPT_PATH} >> /tmp/fortinet-nm-${USERNAME}.log 2>&1 &" ${USERNAME}
+    wait_for_network() {
+        local tries=0
+        until curl -sk --max-time 3 -o /dev/null -w "%{http_code}" \
+            "http://connectivitycheck.gstatic.com/generate_204" \
+            | grep -q "204\|302"; do
+            tries=\$((tries + 1))
+            [[ \$tries -ge 10 ]] && return 1
+            sleep 3
+        done
+    }
+    wait_for_network && su -c "${SCRIPT_PATH} >> /tmp/fortinet-nm-${USERNAME}.log 2>&1" ${USERNAME}
 fi
 EOF
 sudo chmod +x /etc/NetworkManager/dispatcher.d/90-fortinet-login
@@ -64,12 +71,20 @@ sudo mkdir -p "$SLEEP_DIR"
 
 sudo tee "$SLEEP_DIR/bits-wifi-login" > /dev/null << EOF
 #!/usr/bin/env bash
-# Re-authenticate after waking from suspend (session expires after ~4 hrs)
 if [[ "\$1" == "post" ]]; then
-    sleep 5  # give NetworkManager time to reconnect
+    wait_for_network() {
+        local tries=0
+        until curl -sk --max-time 3 -o /dev/null -w "%{http_code}" \
+            "http://connectivitycheck.gstatic.com/generate_204" \
+            | grep -q "204\|302"; do
+            tries=\$((tries + 1))
+            [[ \$tries -ge 10 ]] && return 1
+            sleep 3
+        done
+    }
     CURRENT_SSID=\$(nmcli -t -f active,ssid dev wifi 2>/dev/null | grep '^yes' | cut -d: -f2)
     if [[ "\$CURRENT_SSID" =~ ^BITS-(STUDENT|STAFF)$ ]]; then
-        su -c "${SCRIPT_PATH} >> /tmp/fortinet-login-${USERNAME}.log 2>&1 &" ${USERNAME}
+        wait_for_network && su -c "${SCRIPT_PATH}" ${USERNAME}
     fi
 fi
 EOF
@@ -82,11 +97,15 @@ sudo tee /etc/systemd/system/bits-wifi-login.service > /dev/null << EOF
 [Unit]
 Description=BITS WiFi Fortinet Login
 After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=oneshot
 User=${USERNAME}
 ExecStart=${SCRIPT_PATH}
+
+[Install]
+WantedBy=multi-user.target
 EOF
 log "✓ systemd service installed."
 

@@ -11,16 +11,6 @@ fi
 CREDS_FILE="${SCRIPT_DIR}/creds.conf"
 PORTAL="https://fw.bits-pilani.ac.in:8090"
 
-if command -v nmcli >/dev/null 2>&1; then
-    SSID="$(nmcli -t -f active,ssid dev wifi 2>/dev/null | grep '^yes' | cut -d: -f2)"
-elif command -v networksetup >/dev/null 2>&1; then
-    # Get macOS Wi-Fi interface (typically en0) and extract active network
-    WIFI_IFACE="$(networksetup -listallhardwareports 2>/dev/null | awk '/Wi-Fi|AirPort/{getline; print $NF}')"
-    SSID="$(networksetup -getairportnetwork "$WIFI_IFACE" 2>/dev/null | awk -F': ' '{print $2}')"
-else
-    SSID="Unknown"
-fi
-
 COOKIE_FILE="/tmp/fortinet_cookies_$(id -u).txt"
 
 # Set strict permissions for newly created sensitive files (cookies, error logs)
@@ -110,6 +100,16 @@ login() {
 }
 
 main() {
+    if command -v nmcli >/dev/null 2>&1; then
+        SSID="$(nmcli -t -f active,ssid dev wifi 2>/dev/null | grep '^yes' | cut -d: -f2)"
+    elif command -v networksetup >/dev/null 2>&1; then
+        # Get macOS Wi-Fi interface (typically en0) and extract active network
+        WIFI_IFACE="$(networksetup -listallhardwareports 2>/dev/null | awk '/Wi-Fi|AirPort/{getline; print $NF}')"
+        SSID="$(networksetup -getairportnetwork "$WIFI_IFACE" 2>/dev/null | awk -F': ' '{print $2}')"
+    else
+        SSID="Unknown"
+    fi
+
     log "Checking connectivity..."
     if is_logged_in; then
         log "Already authenticated, nothing to do."
