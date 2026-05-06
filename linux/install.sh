@@ -57,39 +57,29 @@ if [[ "\$2" == "up" ]] && [[ "\$CURRENT_SSID" =~ ^BITS-(STUDENT|STAFF)$ ]]; then
     wait_for_network && su -c "${SCRIPT_PATH} >> /tmp/fortinet-nm-${USERNAME}.log 2>&1" ${USERNAME}
 fi
 EOF
+
 sudo chmod +x /etc/NetworkManager/dispatcher.d/90-fortinet-login
 log "✓ NetworkManager dispatcher installed."
 
-# ── Suspend/resume hook ───────────────────────────────────────────────────────
+# ── Resume service ────────────────────────────────────────────────────────────
 
-# Handle differing distro paths for system-sleep
-SLEEP_DIR="/usr/lib/systemd/system-sleep"
-if [[ -d "/lib/systemd/system-sleep" && ! -d "/usr/lib/systemd/system-sleep" ]]; then
-    SLEEP_DIR="/lib/systemd/system-sleep"
-fi
-sudo mkdir -p "$SLEEP_DIR"
+sudo tee /etc/systemd/system/bits-wifi-login-resume.service > /dev/null << EOF
+[Unit]
+Description=BITS WiFi Login after resume
+After=suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
+Wants=network-online.target
 
-sudo tee "$SLEEP_DIR/bits-wifi-login" > /dev/null << EOF
-#!/usr/bin/env bash
-if [[ "\$1" == "post" ]]; then
-    wait_for_network() {
-        local tries=0
-        until curl -sk --max-time 3 -o /dev/null -w "%{http_code}" \
-            "http://connectivitycheck.gstatic.com/generate_204" \
-            | grep -q "204\|302"; do
-            tries=\$((tries + 1))
-            [[ \$tries -ge 10 ]] && return 1
-            sleep 3
-        done
-    }
-    CURRENT_SSID=\$(nmcli -t -f active,ssid dev wifi 2>/dev/null | grep '^yes' | cut -d: -f2)
-    if [[ "\$CURRENT_SSID" =~ ^BITS-(STUDENT|STAFF)$ ]]; then
-        wait_for_network && su -c "${SCRIPT_PATH}" ${USERNAME}
-    fi
-fi
+[Service]
+Type=oneshot
+User=${USERNAME}
+ExecStartPre=/bin/sleep 5
+ExecStart=${SCRIPT_PATH}
+
+[Install]
+WantedBy=suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
 EOF
-sudo chmod +x "$SLEEP_DIR/bits-wifi-login"
-log "✓ Suspend/resume hook installed."
+
+log "✓ Resume service installed."
 
 # ── systemd service ───────────────────────────────────────────────────────────
 
@@ -107,6 +97,7 @@ ExecStart=${SCRIPT_PATH}
 [Install]
 WantedBy=multi-user.target
 EOF
+
 log "✓ systemd service installed."
 
 # ── systemd timer (every 30 min for session expiry) ───────────────────────────
@@ -123,11 +114,13 @@ Persistent=true
 [Install]
 WantedBy=timers.target
 EOF
+
 log "✓ systemd timer installed."
 
 # ── Enable and start ──────────────────────────────────────────────────────────
 
 sudo systemctl daemon-reload
+sudo systemctl enable bits-wifi-login-resume.service
 sudo systemctl enable --now bits-wifi-login.timer
 log "✓ Timer enabled and started."
 
@@ -138,7 +131,7 @@ echo "✓ Installation complete."
 echo ""
 echo "  Triggers:"
 echo "    - Every WiFi connect to BITS-STUDENT (NM dispatcher)"
-echo "    - Every resume from suspend/sleep (system-sleep hook)"
+echo "    - Every resume from suspend/sleep (systemd resume service)"
 echo "    - Every 30 minutes (systemd timer, persistent across sleep)"
 echo ""
 echo "  Logs:"
