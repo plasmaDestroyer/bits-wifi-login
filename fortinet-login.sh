@@ -11,10 +11,14 @@ fi
 CREDS_FILE="${SCRIPT_DIR}/creds.conf"
 PORTAL="https://fw.bits-pilani.ac.in:8090"
 
-COOKIE_FILE="/tmp/fortinet_cookies_$(id -u).txt"
-
 # Set strict permissions for newly created sensitive files (cookies, error logs)
 umask 077
+
+COOKIE_FILE="$(mktemp "/tmp/fortinet_cookies_$(id -u).XXXXXX")" || {
+    log "ERROR: Could not create temporary cookie file."
+    exit 1
+}
+trap 'rm -f "$COOKIE_FILE"' EXIT
 
 if [[ ! -f "$CREDS_FILE" ]]; then
     log "ERROR: Credentials file not found at $CREDS_FILE"
