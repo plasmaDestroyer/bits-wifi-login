@@ -86,6 +86,23 @@ if ([string]::IsNullOrWhiteSpace($global:USERNAME) -or [string]::IsNullOrWhiteSp
 
 # ── Functions ─────────────────────────────────────────────────────────────────
 
+function Get-CurrentSsid {
+    $output = netsh wlan show interfaces 2>$null
+    foreach ($line in $output) {
+        if ($line -match '^\s*SSID\s+:\s+(.+)$' -and $line -notmatch '^\s*BSSID\s+:') {
+            return $Matches[1].Trim()
+        }
+    }
+
+    return "Unknown"
+}
+
+function Test-BitsSsid {
+    param([string]$Ssid)
+
+    return $Ssid -match '^BITS-(STUDENT|STAFF)$'
+}
+
 function Is-LoggedIn {
     $code = curl.exe -sk --max-time 5 -o NUL -w "%{http_code}" $CHECK_URL
     Log "Check: Connectivity status code is $code"
@@ -148,6 +165,12 @@ function Login {
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 try {
+    $ssid = Get-CurrentSsid
+    if (-not (Test-BitsSsid -Ssid $ssid)) {
+        Log "Current WiFi is '$ssid'; not a BITS network. Skipping."
+        exit 0
+    }
+
     Log "Checking connectivity..."
     if (Is-LoggedIn) {
         Log "Already authenticated, nothing to do."

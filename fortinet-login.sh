@@ -24,6 +24,10 @@ chmod 600 "$CREDS_FILE" 2>/dev/null
 source "$CREDS_FILE"
 # ──────────────────────────────────────────────────────────────────────────────
 
+is_bits_ssid() {
+    [[ "$SSID" =~ ^BITS-(STUDENT|STAFF)$ ]]
+}
+
 is_logged_in() {
     local code
     code=$(curl -sk --max-time 5 -o /dev/null -w "%{http_code}" \
@@ -108,6 +112,11 @@ main() {
         SSID="$(networksetup -getairportnetwork "$WIFI_IFACE" 2>/dev/null | awk -F': ' '{print $2}')"
     else
         SSID="Unknown"
+    fi
+
+    if ! is_bits_ssid; then
+        log "Current WiFi is '${SSID}'; not a BITS network. Skipping."
+        exit 0
     fi
 
     log "Checking connectivity..."
