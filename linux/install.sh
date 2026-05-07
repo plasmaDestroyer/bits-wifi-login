@@ -8,6 +8,18 @@ USERNAME="$(whoami)"
 
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
 
+escape_creds_value() {
+    local value="$1"
+
+    value="${value//\\/\\\\}"
+    value="${value//\"/\\\"}"
+    value="${value//$'\r'/\\r}"
+    value="${value//$'\n'/\\n}"
+    value="${value//$'\t'/\\t}"
+
+    printf '"%s"\n' "$value"
+}
+
 fail_hint() {
     log "ERROR: install failed at line $1."
     log "Some files may have been installed already. Re-run after fixing the error, or uninstall manually."
@@ -34,8 +46,12 @@ if [[ ! -f "${SCRIPT_DIR}/creds.conf" ]]; then
     read -rp "Enter your BITS username: " input_user </dev/tty
     read -rsp "Enter your BITS password: " input_pass </dev/tty
     echo ""
-    printf "USERNAME=%q\n" "$input_user" > "${SCRIPT_DIR}/creds.conf"
-    printf "PASSWORD=%q\n" "$input_pass" >> "${SCRIPT_DIR}/creds.conf"
+    {
+        printf "USERNAME="
+        escape_creds_value "$input_user"
+        printf "PASSWORD="
+        escape_creds_value "$input_pass"
+    } > "${SCRIPT_DIR}/creds.conf"
     chmod 600 "${SCRIPT_DIR}/creds.conf"
     log "✓ creds.conf created."
 else

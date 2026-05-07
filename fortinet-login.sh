@@ -20,13 +20,68 @@ COOKIE_FILE="$(mktemp "/tmp/fortinet_cookies_$(id -u).XXXXXX")" || {
 }
 trap 'rm -f "$COOKIE_FILE"' EXIT
 
+# ─── CREDENTIALS ──────────────────────────────────────────────────────────────
+unescape_creds_value() {
+    local value="$1"
+    local result=""
+    local i char next
+
+    for ((i = 0; i < ${#value}; i++)); do
+        char="${value:i:1}"
+        if [[ "$char" == "\\" && $((i + 1)) -lt ${#value} ]]; then
+            i=$((i + 1))
+            next="${value:i:1}"
+            case "$next" in
+                "\\") result+="\\" ;;
+                '"') result+='"' ;;
+                n) result+=$'\n' ;;
+                r) result+=$'\r' ;;
+                t) result+=$'\t' ;;
+                *) result+="$next" ;;
+            esac
+        else
+            result+="$char"
+        fi
+    done
+
+    printf '%s' "$result"
+}
+
+read_creds_value() {
+    local key="$1"
+    local line value
+
+    line="$(grep -E "^[[:space:]]*${key}[[:space:]]*=" "$CREDS_FILE" | tail -n 1 || true)"
+    [[ -n "$line" ]] || return 0
+
+    value="${line#*=}"
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
+
+    if [[ "$value" == \"*\" && "$value" == *\" ]]; then
+        value="${value:1:${#value}-2}"
+        unescape_creds_value "$value"
+    elif [[ "$value" == \'*\' && "$value" == *\' ]]; then
+        printf '%s' "${value:1:${#value}-2}"
+    else
+        printf '%s' "$value"
+    fi
+}
+
 if [[ ! -f "$CREDS_FILE" ]]; then
     log "ERROR: Credentials file not found at $CREDS_FILE"
     exit 1
 fi
 chmod 600 "$CREDS_FILE" 2>/dev/null
-source "$CREDS_FILE"
-# ──────────────────────────────────────────────────────────────────────────────
+USERNAME="$(read_creds_value USERNAME)"
+PASSWORD="$(read_creds_value PASSWORD)"
+
+if [[ -z "$USERNAME" || -z "$PASSWORD" ]]; then
+    log "ERROR: creds.conf must contain USERNAME and PASSWORD."
+    exit 1
+fi
+
+# ─── FUNCTIONS ────────────────────────────────────────────────────────────────
 
 is_bits_ssid() {
     [[ "$SSID" =~ ^BITS-(STUDENT|STAFF)$ ]]
