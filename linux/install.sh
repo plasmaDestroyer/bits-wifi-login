@@ -1,10 +1,19 @@
 #!/usr/bin/env bash
 
+set -euo pipefail
+
 SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SCRIPT_PATH="${SCRIPT_DIR}/fortinet-login.sh"
 USERNAME="$(whoami)"
 
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
+
+fail_hint() {
+    log "ERROR: install failed at line $1."
+    log "Some files may have been installed already. Re-run after fixing the error, or uninstall manually."
+}
+
+trap 'fail_hint "$LINENO"' ERR
 
 # ── Preflight checks ──────────────────────────────────────────────────────────
 
@@ -59,6 +68,7 @@ fi
 EOF
 
 sudo chmod +x /etc/NetworkManager/dispatcher.d/90-fortinet-login
+sudo test -x /etc/NetworkManager/dispatcher.d/90-fortinet-login
 log "✓ NetworkManager dispatcher installed."
 
 # ── Resume service ────────────────────────────────────────────────────────────
@@ -79,6 +89,7 @@ ExecStart=${SCRIPT_PATH}
 WantedBy=suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
 EOF
 
+sudo test -f /etc/systemd/system/bits-wifi-login-resume.service
 log "✓ Resume service installed."
 
 # ── systemd service ───────────────────────────────────────────────────────────
@@ -98,6 +109,7 @@ ExecStart=${SCRIPT_PATH}
 WantedBy=multi-user.target
 EOF
 
+sudo test -f /etc/systemd/system/bits-wifi-login.service
 log "✓ systemd service installed."
 
 # ── systemd timer (every 30 min for session expiry) ───────────────────────────
@@ -115,6 +127,7 @@ Persistent=true
 WantedBy=timers.target
 EOF
 
+sudo test -f /etc/systemd/system/bits-wifi-login.timer
 log "✓ systemd timer installed."
 
 # ── Enable and start ──────────────────────────────────────────────────────────
@@ -122,6 +135,8 @@ log "✓ systemd timer installed."
 sudo systemctl daemon-reload
 sudo systemctl enable bits-wifi-login-resume.service
 sudo systemctl enable --now bits-wifi-login.timer
+sudo systemctl is-enabled bits-wifi-login-resume.service >/dev/null
+sudo systemctl is-enabled bits-wifi-login.timer >/dev/null
 log "✓ Timer enabled and started."
 
 # ── Done ──────────────────────────────────────────────────────────────────────

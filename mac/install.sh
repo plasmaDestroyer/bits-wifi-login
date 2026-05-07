@@ -1,14 +1,29 @@
 #!/usr/bin/env bash
 
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SCRIPT_PATH="${SCRIPT_DIR}/fortinet-login.sh"
-PLIST=~/Library/LaunchAgents/ac.bits.wifi-login.plist
+LABEL="ac.bits.wifi-login"
+PLIST="$HOME/Library/LaunchAgents/${LABEL}.plist"
+LAUNCHD_DOMAIN="gui/$(id -u)"
+LAUNCHD_SERVICE="${LAUNCHD_DOMAIN}/${LABEL}"
 
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
 
+fail_hint() {
+    log "ERROR: install failed at line $1."
+    log "Some files may have been installed already. Re-run after fixing the error, or uninstall manually."
+}
+
+trap 'fail_hint "$LINENO"' ERR
+
 # ── Preflight checks ──────────────────────────────────────────────────────────
+
+if [[ "$(id -u)" == "0" ]]; then
+    log "ERROR: Do not run the macOS installer with sudo. It installs a per-user LaunchAgent."
+    exit 1
+fi
 
 if [[ ! -f "$SCRIPT_PATH" ]]; then
     log "ERROR: fortinet-login.sh not found at $SCRIPT_PATH"
@@ -32,6 +47,7 @@ if [[ ! -f "${SCRIPT_DIR}/creds.conf" ]]; then
         printf "PASSWORD='%s'\n" "${input_pass//\'/\'\\\'\'}"
     } > "${SCRIPT_DIR}/creds.conf"
     chmod 600 "${SCRIPT_DIR}/creds.conf"
+    [[ -f "${SCRIPT_DIR}/creds.conf" ]]
     log "✓ creds.conf created."
 else
     log "✓ creds.conf already exists, skipping."
@@ -40,6 +56,7 @@ fi
 # ── Make script executable ────────────────────────────────────────────────────
 
 chmod +x "$SCRIPT_PATH"
+[[ -x "$SCRIPT_PATH" ]]
 log "✓ Script permissions set."
 
 # ── launchd plist ─────────────────────────────────────────────────────────────
@@ -53,7 +70,7 @@ cat > "$PLIST" << EOF
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>ac.bits.wifi-login</string>
+    <string>${LABEL}</string>
 
     <key>ProgramArguments</key>
     <array>
@@ -74,12 +91,16 @@ cat > "$PLIST" << EOF
 </dict>
 </plist>
 EOF
+plutil -lint "$PLIST" >/dev/null
+[[ -f "$PLIST" ]]
 log "✓ launchd plist created."
 
 # ── Load the agent ────────────────────────────────────────────────────────────
 
-launchctl unload "$PLIST" 2>/dev/null || true
-launchctl load "$PLIST"
+launchctl bootout "$LAUNCHD_SERVICE" 2>/dev/null || true
+launchctl bootstrap "$LAUNCHD_DOMAIN" "$PLIST"
+launchctl enable "$LAUNCHD_SERVICE" 2>/dev/null || true
+launchctl print "$LAUNCHD_SERVICE" >/dev/null
 log "✓ launchd agent loaded."
 
 # ── Done ──────────────────────────────────────────────────────────────────────

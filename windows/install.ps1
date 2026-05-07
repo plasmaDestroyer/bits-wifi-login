@@ -5,6 +5,13 @@ function Log {
     Write-Host ("[{0}] {1}" -f (Get-Date -Format 'HH:mm:ss'), $Message)
 }
 
+function Fail-Hint {
+    param([string]$Message)
+
+    Log "ERROR: install failed: $Message"
+    Log "Some files or scheduled tasks may have been installed already. Re-run after fixing the error, or uninstall manually."
+}
+
 function Escape-CredsValue {
     param([string]$Value)
 
@@ -217,13 +224,22 @@ try {
         -TaskName $MainTaskName `
         -Xml (Get-Content $mainTaskXmlPath -Raw) `
         -Force | Out-Null
+    if (-not (Get-ScheduledTask -TaskName $MainTaskName -ErrorAction SilentlyContinue)) {
+        throw "Main scheduled task was not registered."
+    }
     Log "[OK] Main scheduled task registered (every 30 minutes and on login)."
 
     Register-ScheduledTask `
         -TaskName $EventTaskName `
         -Xml (Get-Content $eventTaskXmlPath -Raw) `
         -Force | Out-Null
+    if (-not (Get-ScheduledTask -TaskName $EventTaskName -ErrorAction SilentlyContinue)) {
+        throw "Network/resume scheduled task was not registered."
+    }
     Log "[OK] Network and resume trigger task registered."
+} catch {
+    Fail-Hint $_.Exception.Message
+    exit 1
 } finally {
     Remove-Item $mainTaskXmlPath -Force -ErrorAction SilentlyContinue
     Remove-Item $eventTaskXmlPath -Force -ErrorAction SilentlyContinue
