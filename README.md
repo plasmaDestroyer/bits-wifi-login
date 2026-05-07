@@ -31,9 +31,13 @@ After installation, it will prompt you for your BITS Wifi username and password 
 
 That's it. From now on, whenever your device connects to `BITS-STUDENT` (or `BITS-STAFF` - they're essentially the same thing - in case you didn't know), you'll be logged in automatically without needing the Browser Captive Portal.
 
+## 🔧 Troubleshooting
+
+If something breaks (missing files, broken hooks, permission errors, or partial installs), just **re-run the install script** for your OS. It will detect existing components and repair or re-register them as needed.
+
 ## 💡 Good to know
 
-*   **Linux:** Fully tested and works like a charm (I use Arch btw 😉).
+*   **Linux:** Fully tested and works fine (I use Arch btw 😉).
 *   **macOS:** Should work well since it's essentially the same as linux.
 *   **Windows:** Added recently, it should work great, though I haven't used it much as compared to linux.
 *   **Issues?** If facing any issues, feel free to reach out to me or [open an issue on GitHub](https://github.com/plasmaDestroyer/bits-wifi-login/issues).
