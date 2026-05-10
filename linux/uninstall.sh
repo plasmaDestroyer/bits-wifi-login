@@ -4,17 +4,12 @@ set -euo pipefail
 
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
 
-if [[ "$EUID" -ne 0 ]]; then
-    log "ERROR: Please run this script with sudo."
-    exit 1
-fi
-
 removed=0
 warned=0
 
 remove_file() {
     if [[ -f "$1" ]]; then
-        rm -f "$1"
+        sudo rm -f "$1"
         log "✓ Removed $1"
         ((removed++)) || true
     else
@@ -23,36 +18,34 @@ remove_file() {
     fi
 }
 
-# 1. Stop & disable timer
-if systemctl is-active --quiet bits-wifi-login.timer 2>/dev/null; then
-    systemctl disable --now bits-wifi-login.timer >/dev/null 2>&1 || true
-    log "✓ Disabled timer bits-wifi-login.timer"
-    ((removed++)) || true
-else
-    log "⚠ Not active: bits-wifi-login.timer"
-    ((warned++)) || true
-fi
+disable_unit() {
+    local unit="$1"
+    # systemctl disable returns 0 if successful (even if already disabled)
+    # and >0 if the unit does not exist or failed to disable
+    if sudo systemctl disable --now "$unit" >/dev/null 2>&1; then
+        log "✓ Disabled and stopped $unit"
+        ((removed++)) || true
+    else
+        log "⚠ Not found or already removed: $unit"
+        ((warned++)) || true
+    fi
+}
 
-# 2. Disable resume service
-if systemctl is-enabled --quiet bits-wifi-login-resume.service 2>/dev/null; then
-    systemctl disable bits-wifi-login-resume.service >/dev/null 2>&1 || true
-    log "✓ Disabled service bits-wifi-login-resume.service"
-    ((removed++)) || true
-else
-    log "⚠ Not enabled: bits-wifi-login-resume.service"
-    ((warned++)) || true
-fi
+# 1. Stop & disable units unconditionally to ensure symlinks are removed
+disable_unit "bits-wifi-login.timer"
+disable_unit "bits-wifi-login.service"
+disable_unit "bits-wifi-login-resume.service"
 
-# 3. Remove unit files
+# 2. Remove unit files
 remove_file "/etc/systemd/system/bits-wifi-login.timer"
 remove_file "/etc/systemd/system/bits-wifi-login.service"
 remove_file "/etc/systemd/system/bits-wifi-login-resume.service"
 
-# 4. systemctl daemon-reload
-systemctl daemon-reload
+# 3. systemctl daemon-reload
+sudo systemctl daemon-reload
 log "✓ Reloaded systemd daemon"
 
-# 5. Remove NM dispatcher script
+# 4. Remove NM dispatcher script
 remove_file "/etc/NetworkManager/dispatcher.d/90-fortinet-login"
 
 echo ""
