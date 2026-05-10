@@ -1,18 +1,18 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 
 function Log {
     param([string]$Message)
     Write-Host ("[{0}] {1}" -f (Get-Date -Format 'HH:mm:ss'), $Message)
 }
 
-function Fail-Hint {
+function Show-FailHint {
     param([string]$Message)
 
     Log "ERROR: install failed: $Message"
     Log "Some files or scheduled tasks may have been installed already. Re-run after fixing the error, or uninstall manually."
 }
 
-function Escape-CredsValue {
+function ConvertTo-EscapedCredsValue {
     param([string]$Value)
 
     $escaped = $Value.Replace('\', '\\')
@@ -24,7 +24,7 @@ function Escape-CredsValue {
     return '"' + $escaped + '"'
 }
 
-function Escape-XmlText {
+function ConvertTo-EscapedXmlText {
     param([string]$Value)
 
     return [System.Security.SecurityElement]::Escape($Value)
@@ -33,26 +33,27 @@ function Escape-XmlText {
 function Write-CredsFile {
     param(
         [string]$Path,
-        [string]$Username,
-        [string]$Password
+        [PSCredential]$Credential
     )
 
+    $user = $Credential.UserName
+    $pass = $Credential.GetNetworkCredential().Password
     @(
-        "USERNAME=$(Escape-CredsValue $Username)"
-        "PASSWORD=$(Escape-CredsValue $Password)"
+        "USERNAME=$(ConvertTo-EscapedCredsValue $user)"
+        "PASSWORD=$(ConvertTo-EscapedCredsValue $pass)"
     ) | Set-Content -Path $Path -Encoding UTF8
 }
 
-function New-TaskXml {
+function Get-TaskXml {
     param(
         [string]$TaskUser,
         [string]$LoginScript,
         [string]$PeriodicStartBoundary
     )
 
-    $escapedTaskUser = Escape-XmlText $TaskUser
-    $escapedTaskArgs = Escape-XmlText "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$LoginScript`""
-    $escapedStartBoundary = Escape-XmlText $PeriodicStartBoundary
+    $escapedTaskUser = ConvertTo-EscapedXmlText $TaskUser
+    $escapedTaskArgs = ConvertTo-EscapedXmlText "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$LoginScript`""
+    $escapedStartBoundary = ConvertTo-EscapedXmlText $PeriodicStartBoundary
 
     return @"
 <?xml version="1.0" encoding="UTF-16"?>
@@ -100,14 +101,14 @@ function New-TaskXml {
 "@
 }
 
-function New-EventTaskXml {
+function Get-EventTaskXml {
     param(
         [string]$TaskUser,
         [string]$LoginScript
     )
 
-    $escapedTaskUser = Escape-XmlText $TaskUser
-    $escapedTaskArgs = Escape-XmlText "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$LoginScript`""
+    $escapedTaskUser = ConvertTo-EscapedXmlText $TaskUser
+    $escapedTaskArgs = ConvertTo-EscapedXmlText "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$LoginScript`""
 
     return @"
 <?xml version="1.0" encoding="UTF-16"?>
@@ -193,14 +194,11 @@ if (-not (Test-Path $CredsFile)) {
     Log "No creds.conf found. Let's create one."
     $inputUser = Read-Host "Enter your BITS username"
     $inputPass = Read-Host "Enter your BITS password" -AsSecureString
-    $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($inputPass)
+    $cred = New-Object PSCredential($inputUser, $inputPass)
     try {
-        $plainPass = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
-        Write-CredsFile -Path $CredsFile -Username $inputUser -Password $plainPass
+        Write-CredsFile -Path $CredsFile -Credential $cred
     } finally {
-        if ($bstr -ne [IntPtr]::Zero) {
-            [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
-        }
+        # PSCredential handles secure memory cleanup
     }
     Log "[OK] creds.conf created."
 } else {
@@ -210,8 +208,8 @@ if (-not (Test-Path $CredsFile)) {
 # ── Register scheduled tasks ─────────────────────────────────────────────────
 
 $periodicStartBoundary = (Get-Date).AddMinutes(1).ToString("s")
-$mainTaskXml = New-TaskXml -TaskUser $TaskUser -LoginScript $LoginScript -PeriodicStartBoundary $periodicStartBoundary
-$eventTaskXml = New-EventTaskXml -TaskUser $TaskUser -LoginScript $LoginScript
+$mainTaskXml = Get-TaskXml -TaskUser $TaskUser -LoginScript $LoginScript -PeriodicStartBoundary $periodicStartBoundary
+$eventTaskXml = Get-EventTaskXml -TaskUser $TaskUser -LoginScript $LoginScript
 
 $mainTaskXmlPath = Join-Path $env:TEMP "bits-wifi-main.xml"
 $eventTaskXmlPath = Join-Path $env:TEMP "bits-wifi-connect.xml"
@@ -238,7 +236,7 @@ try {
     }
     Log "[OK] Network and resume trigger task registered."
 } catch {
-    Fail-Hint $_.Exception.Message
+    Show-FailHint $_.Exception.Message
     exit 1
 } finally {
     Remove-Item $mainTaskXmlPath -Force -ErrorAction SilentlyContinue
