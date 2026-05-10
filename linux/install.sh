@@ -93,12 +93,19 @@ sudo tee /etc/systemd/system/bits-wifi-login-resume.service > /dev/null << EOF
 [Unit]
 Description=BITS WiFi Login after resume
 After=suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
-Wants=network-online.target
 
 [Service]
 Type=oneshot
 User=${USERNAME}
-ExecStartPre=/bin/sleep 5
+ExecStartPre=/bin/bash -c '\
+    wifi_status=\$(nmcli radio wifi 2>/dev/null); \
+    [[ "\$wifi_status" != "enabled" ]] && exit 0; \
+    tries=0; \
+    while [[ -z "\$(nmcli -t -f active,ssid dev wifi 2>/dev/null | grep ^yes | cut -d: -f2)" ]]; do \
+        tries=\$((tries+1)); \
+        [[ \$tries -ge 15 ]] && exit 0; \
+        sleep 2; \
+    done'
 ExecStart=${SCRIPT_PATH}
 
 [Install]
