@@ -17,12 +17,11 @@ removed=0
 warned=0
 
 # 1. Bootout the agent
-if launchctl print "$LAUNCHD_SERVICE" >/dev/null 2>&1; then
-    launchctl bootout "$LAUNCHD_SERVICE" 2>/dev/null || true
+if launchctl bootout "$LAUNCHD_SERVICE" >/dev/null 2>&1; then
     log "✓ Unloaded launchd agent"
     ((removed++)) || true
 else
-    log "⚠ Not loaded: launchd agent"
+    log "⚠ Not loaded or already unloaded: launchd agent"
     ((warned++)) || true
 fi
 
