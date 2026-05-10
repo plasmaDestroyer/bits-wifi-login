@@ -20,20 +20,20 @@ warned=0
 if launchctl print "$LAUNCHD_SERVICE" >/dev/null 2>&1; then
     launchctl bootout "$LAUNCHD_SERVICE" 2>/dev/null || true
     log "✓ Unloaded launchd agent"
-    ((removed++))
+    ((removed++)) || true
 else
     log "⚠ Not loaded: launchd agent"
-    ((warned++))
+    ((warned++)) || true
 fi
 
 # 2. Remove plist
 if [[ -f "$PLIST" ]]; then
     rm -f "$PLIST"
     log "✓ Removed $PLIST"
-    ((removed++))
+    ((removed++)) || true
 else
     log "⚠ Not found: $PLIST"
-    ((warned++))
+    ((warned++)) || true
 fi
 
 echo ""

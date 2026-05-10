@@ -16,10 +16,10 @@ remove_file() {
     if [[ -f "$1" ]]; then
         rm -f "$1"
         log "✓ Removed $1"
-        ((removed++))
+        ((removed++)) || true
     else
         log "⚠ Not found: $1"
-        ((warned++))
+        ((warned++)) || true
     fi
 }
 
@@ -27,20 +27,20 @@ remove_file() {
 if systemctl is-active --quiet bits-wifi-login.timer 2>/dev/null; then
     systemctl disable --now bits-wifi-login.timer >/dev/null 2>&1 || true
     log "✓ Disabled timer bits-wifi-login.timer"
-    ((removed++))
+    ((removed++)) || true
 else
     log "⚠ Not active: bits-wifi-login.timer"
-    ((warned++))
+    ((warned++)) || true
 fi
 
 # 2. Disable resume service
 if systemctl is-enabled --quiet bits-wifi-login-resume.service 2>/dev/null; then
     systemctl disable bits-wifi-login-resume.service >/dev/null 2>&1 || true
     log "✓ Disabled service bits-wifi-login-resume.service"
-    ((removed++))
+    ((removed++)) || true
 else
     log "⚠ Not enabled: bits-wifi-login-resume.service"
-    ((warned++))
+    ((warned++)) || true
 fi
 
 # 3. Remove unit files
