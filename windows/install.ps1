@@ -163,6 +163,7 @@ if (-not $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Adm
 
 $CurrentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()
 $TaskUser = $CurrentIdentity.Name
+Write-Host "[INFO] Registering scheduled tasks for user: $TaskUser — if this looks wrong (e.g. an admin account instead of your login), re-run the installer as the correct user." -ForegroundColor Yellow
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoDir = Split-Path -Parent $ScriptDir
 $LoginScript = Join-Path $ScriptDir "fortinet-login.ps1"
