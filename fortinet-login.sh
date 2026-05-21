@@ -117,7 +117,7 @@ login() {
     magic=$(get_magic_token)
 
     if [[ -z "$magic" ]]; then
-        log "Could not get magic token — are you already logged in?"
+        log "Could not get magic token — captive portal not detected (already logged in, or portal unreachable)."
         return 1
     fi
 
@@ -129,26 +129,38 @@ login() {
 
     # Emulate browser: Submit the form to / (exactly as the form action="/" specifies)
     log "Submitting credentials..."
-    local post_resp
-    post_resp=$(curl -c "$COOKIE_FILE" -b "$COOKIE_FILE" -sk \
+    local post_resp http_code post_body
+    post_body=$(mktemp)
+    http_code=$(curl -c "$COOKIE_FILE" -b "$COOKIE_FILE" -sk \
         -X POST \
         "${PORTAL}/" \
         --data-urlencode "username=${USERNAME}" \
         --data-urlencode "password=${PASSWORD}" \
         --data "magic=${magic}" \
-        --data "4Tredir=http://connectivitycheck.gstatic.com/generate_204")
+        --data "4Tredir=http://connectivitycheck.gstatic.com/generate_204" \
+        -o "$post_body" \
+        -w '%{http_code}')
+    post_resp=$(cat "$post_body")
+    rm -f "$post_body"
+    log "Portal responded: HTTP $http_code"
 
     # Emulate browser: Follow the JavaScript redirect to the keepalive endpoint
-    local keepalive
+    local keepalive error_file
     keepalive=$(echo "$post_resp" | grep -m 1 -ioE 'keepalive\?[a-f0-9]+' | cut -d? -f2)
+    error_file="/tmp/fortinet_error_$(id -u).html"
 
     if [[ -n "$keepalive" ]]; then
         log "Credentials accepted! Found keepalive logic, activating connection..."
         curl -c "$COOKIE_FILE" -b "$COOKIE_FILE" -skL \
             "${PORTAL}/keepalive?${keepalive}" -o /dev/null
     else
-        log "Warning: No keepalive redirect found. Fortinet might have rejected the login."
-        echo "$post_resp" >"/tmp/fortinet_error_$(id -u).html"
+        echo "$post_resp" >"$error_file"
+        if echo "$post_resp" | grep -qiE 'invalid.{0,30}(credential|password|user)|wrong.{0,20}(password|user)|authentication.{0,20}fail|please.{0,10}try.{0,10}again|login.{0,10}fail'; then
+            log "✗ Portal rejected credentials — wrong username or password."
+        else
+            log "✗ No keepalive found — unexpected portal response (HTTP $http_code)."
+        fi
+        log "  Response saved to $error_file — attach when reporting a bug."
     fi
 
     sleep 2
@@ -157,7 +169,8 @@ login() {
         log "✓ Login successful!"
         return 0
     else
-        log "✗ Login failed — check credentials or portal reachability."
+        log "✗ Login failed."
+        [[ -f "$error_file" ]] && log "  See $error_file for the portal response."
         return 1
     fi
 }
