@@ -1,3 +1,6 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '')]
+param()
+
 $ErrorActionPreference = "Stop"
 
 function Log {
@@ -8,7 +11,7 @@ function Log {
 $MainTaskName = "BITS-WiFi-Login"
 $EventTaskName = "BITS-WiFi-Login-OnConnect"
 
-# ── Admin Check ──────────────────────────────────────────────────────────────
+# -- Admin Check --------------------------------------------------------------
 $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 if (-not $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     Write-Error "ERROR: This script must be run as Administrator. Please right-click PowerShell and 'Run as Administrator'."
@@ -19,6 +22,7 @@ $removed = 0
 $warned = 0
 
 function Remove-Task {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '')]
     param([string]$TaskName)
 
     if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
@@ -31,12 +35,12 @@ function Remove-Task {
     }
 }
 
-# ── Remove scheduled tasks ───────────────────────────────────────────────────
+# -- Remove scheduled tasks ---------------------------------------------------
 
 Remove-Task -TaskName $MainTaskName
 Remove-Task -TaskName $EventTaskName
 
-# ── Done ─────────────────────────────────────────────────────────────────────
+# -- Done ---------------------------------------------------------------------
 
 Write-Host "`n[DONE] Uninstall complete."
 Write-Host "  Removed/disabled $removed items. ($warned skipped/not found)"

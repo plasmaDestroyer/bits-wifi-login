@@ -1,4 +1,7 @@
-﻿$ErrorActionPreference = "Stop"
+﻿[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '')]
+param()
+
+$ErrorActionPreference = "Stop"
 
 function Log {
     param([string]$Message)

@@ -9,6 +9,7 @@ $CookieFile = Join-Path $env:TEMP "fortinet_cookies_$RunId.txt"
 $DebugFile = Join-Path $env:TEMP "fortinet_debug_$RunId.html"
 
 function Log {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '')]
     param([string]$Message)
 
     $line = "[{0}] {1}" -f (Get-Date -Format 'HH:mm:ss'), $Message
@@ -17,10 +18,12 @@ function Log {
         Add-Content -Path $LogFile -Value $line -Encoding UTF8
     } catch {
         # Logging should not block authentication attempts.
+        Write-Debug $_.Exception.Message
     }
 }
 
 function Unescape-CredsValue {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseApprovedVerbs', '')]
     param([string]$Value)
 
     $builder = New-Object System.Text.StringBuilder
@@ -65,26 +68,28 @@ function Get-CredsValue {
     return $match.Groups[2].Value.Trim()
 }
 
-function Cleanup-TempFiles {
+function Remove-TempFile {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '')]
+    param()
     Remove-Item $CookieFile -Force -ErrorAction SilentlyContinue
 }
 
-# ── Load Credentials ──────────────────────────────────────────────────────────
+# -- Load Credentials --------------------------------------------------------
 if (-not (Test-Path $CredsFile)) {
     Log "ERROR: Credentials file not found at $CredsFile"
     exit 1
 }
 
 $creds = (Get-Content $CredsFile -Raw -Encoding UTF8).TrimStart([char]0xFEFF)
-$global:USERNAME = Get-CredsValue -RawContent $creds -Key "USERNAME"
-$global:PASSWORD = Get-CredsValue -RawContent $creds -Key "PASSWORD"
+$script:USERNAME = Get-CredsValue -RawContent $creds -Key "USERNAME"
+$script:PASSWORD = Get-CredsValue -RawContent $creds -Key "PASSWORD"
 
-if ([string]::IsNullOrWhiteSpace($global:USERNAME) -or [string]::IsNullOrWhiteSpace($global:PASSWORD)) {
+if ([string]::IsNullOrWhiteSpace($script:USERNAME) -or [string]::IsNullOrWhiteSpace($script:PASSWORD)) {
     Log "ERROR: creds.conf is missing USERNAME or PASSWORD."
     exit 1
 }
 
-# ── Functions ─────────────────────────────────────────────────────────────────
+# -- Functions ----------------------------------------------------------------
 
 function Get-CurrentSsid {
     $output = netsh wlan show interfaces 2>$null
@@ -103,7 +108,7 @@ function Test-BitsSsid {
     return $Ssid -match '^BITS-(STUDENT|STAFF)$'
 }
 
-function Is-LoggedIn {
+function Test-LoggedIn {
     $code = curl.exe -sk --max-time 5 -o NUL -w "%{http_code}" $CHECK_URL
     Log "Check: Connectivity status code is $code"
     return ($code -eq "204")
@@ -140,10 +145,10 @@ function Login {
     Log "Step 1: Initializing session via fgtauth..."
     curl.exe -c "$CookieFile" -b "$CookieFile" -skL "${PORTAL}/fgtauth?${magic}" -o NUL
 
-    Log "Step 2: Submitting credentials for user $global:USERNAME..."
+    Log "Step 2: Submitting credentials for user $script:USERNAME..."
     $postResponse = curl.exe -c "$CookieFile" -b "$CookieFile" -sk -X POST "${PORTAL}/" `
-        --data-urlencode "username=$global:USERNAME" `
-        --data-urlencode "password=$global:PASSWORD" `
+        --data-urlencode "username=$script:USERNAME" `
+        --data-urlencode "password=$script:PASSWORD" `
         --data "magic=$magic" `
         --data "4Tredir=http://connectivitycheck.gstatic.com/generate_204"
 
@@ -159,10 +164,10 @@ function Login {
     }
 
     Start-Sleep -Seconds 2
-    return Is-LoggedIn
+    return Test-LoggedIn
 }
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# -- Main ---------------------------------------------------------------------
 
 try {
     $ssid = Get-CurrentSsid
@@ -172,7 +177,7 @@ try {
     }
 
     Log "Checking connectivity..."
-    if (Is-LoggedIn) {
+    if (Test-LoggedIn) {
         Log "Already authenticated, nothing to do."
         exit 0
     }
@@ -189,5 +194,5 @@ try {
     Log "FAIL: All attempts failed."
     exit 1
 } finally {
-    Cleanup-TempFiles
+    Remove-TempFile
 }
