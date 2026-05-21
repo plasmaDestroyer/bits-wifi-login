@@ -75,7 +75,7 @@ if (-not (Test-Path $CredsFile)) {
     exit 1
 }
 
-$creds = Get-Content $CredsFile -Raw
+$creds = (Get-Content $CredsFile -Raw -Encoding UTF8).TrimStart([char]0xFEFF)
 $global:USERNAME = Get-CredsValue -RawContent $creds -Key "USERNAME"
 $global:PASSWORD = Get-CredsValue -RawContent $creds -Key "PASSWORD"
 

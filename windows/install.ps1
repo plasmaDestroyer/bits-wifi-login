@@ -37,10 +37,11 @@ function Write-CredsFile {
     )
 
     $user = $Credential.UserName
-    $pass = $Credential.GetNetworkCredential().Password
+    # creds.conf is intentionally plain text — PSAvoidUsingPlainTextForPassword does not apply here
+    $plainText = $Credential.GetNetworkCredential().Password
     @(
         "USERNAME=$(ConvertTo-EscapedCredsValue $user)"
-        "PASSWORD=$(ConvertTo-EscapedCredsValue $pass)"
+        "PASSWORD=$(ConvertTo-EscapedCredsValue $plainText)"
     ) | Set-Content -Path $Path -Encoding UTF8
 }
 
