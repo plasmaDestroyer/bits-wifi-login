@@ -137,34 +137,48 @@ function Get-MagicToken {
 function Login {
     $magic = Get-MagicToken
     if (-not $magic) {
-        Log "FAIL: No magic token found. Are you connected to BITS-WiFi?"
+        Log "Could not get magic token -- captive portal not detected (already logged in, or portal unreachable)."
         return $false
     }
-    Log "SUCCESS: Magic token is $magic"
+    Log "Got magic token: $magic"
 
     Log "Step 1: Initializing session via fgtauth..."
     curl.exe -c "$CookieFile" -b "$CookieFile" -skL "${PORTAL}/fgtauth?${magic}" -o NUL
 
     Log "Step 2: Submitting credentials for user $script:USERNAME..."
-    $postResponse = curl.exe -c "$CookieFile" -b "$CookieFile" -sk -X POST "${PORTAL}/" `
+    $postBodyFile = Join-Path $env:TEMP "fortinet_body_$RunId.tmp"
+    $httpCode = curl.exe -c "$CookieFile" -b "$CookieFile" -sk -X POST "${PORTAL}/" `
         --data-urlencode "username=$script:USERNAME" `
         --data-urlencode "password=$script:PASSWORD" `
         --data "magic=$magic" `
-        --data "4Tredir=http://connectivitycheck.gstatic.com/generate_204"
+        --data "4Tredir=http://connectivitycheck.gstatic.com/generate_204" `
+        -o $postBodyFile `
+        -w '%{http_code}'
+    $postResponse = (Get-Content $postBodyFile -Raw -Encoding UTF8).TrimStart([char]0xFEFF)
+    Remove-Item $postBodyFile -Force -ErrorAction SilentlyContinue
+    Log "Portal responded: HTTP $httpCode"
 
     if ($postResponse -match 'keepalive\?([a-f0-9]+)') {
         $keepalive = $Matches[1]
-        Log "SUCCESS: Credentials accepted. Keepalive token: $keepalive"
+        Log "Credentials accepted. Keepalive token: $keepalive"
 
         Log "Step 3: Activating connection..."
         curl.exe -c "$CookieFile" -b "$CookieFile" -skL "${PORTAL}/keepalive?${keepalive}" -o NUL
     } else {
-        Log "FAIL: No keepalive found in response. Dumping response to $DebugFile"
         $postResponse | Out-File $DebugFile -Encoding UTF8
+        if ($postResponse -match 'invalid.{0,30}(credential|password|user)|wrong.{0,20}(password|user)|authentication.{0,20}fail|please.{0,10}try.{0,10}again|login.{0,10}fail') {
+            Log "[X] Portal rejected credentials -- wrong username or password."
+        } else {
+            Log "[X] No keepalive found -- unexpected portal response (HTTP $httpCode)."
+        }
+        Log "  Response saved to $DebugFile -- attach when reporting a bug."
     }
 
     Start-Sleep -Seconds 2
-    return Test-LoggedIn
+    if (Test-LoggedIn) { return $true }
+    Log "[X] Login failed."
+    if (Test-Path $DebugFile) { Log "  See $DebugFile for the portal response." }
+    return $false
 }
 
 # -- Main ---------------------------------------------------------------------
