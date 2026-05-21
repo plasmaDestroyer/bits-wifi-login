@@ -16,7 +16,7 @@ curl -fsSL https://plasmaDestroyer.github.io/bits-wifi-login/linux/remote-instal
 ```bash
 curl -fsSL https://plasmaDestroyer.github.io/bits-wifi-login/mac/remote-install.sh | bash
 ```
-*Sets up a background launchd agent that watches for Wi-Fi changes.*
+*Sets up a background launchd agent. Triggers on DNS/network changes (fires on most Wi-Fi connects but is not a precise trigger — the 30-minute periodic fallback is the reliable safety net).*
 
 ### 🪟 Windows
 Open PowerShell as Administrator and run:
