@@ -27,6 +27,8 @@ irm https://plasmaDestroyer.github.io/bits-wifi-login/windows/remote-install.ps1
 
 After installation, it will prompt you for your BITS Wifi username and password to create a `creds.conf` file, and set up all the background triggers for your OS. If you ever change your password or need to fix a typo, you can just edit that file directly.
 
+> **Note:** Do not move the install directory after setup. The installer bakes absolute paths into the background trigger configs (systemd unit, launchd plist, or scheduled task), so moving the directory will break the auto-login triggers. If you ever need to relocate it, just re-run the install script from the new location and it will repair everything.
+
 ## 💤 Post-Installation
 
 That's it. From now on, whenever your device connects to `BITS-STUDENT` (or `BITS-STAFF` - they're essentially the same thing - in case you didn't know), you'll be logged in automatically without needing the Browser Captive Portal.
