@@ -32,12 +32,12 @@ unescape_creds_value() {
             i=$((i + 1))
             next="${value:i:1}"
             case "$next" in
-                "\\") result+="\\" ;;
-                '"') result+='"' ;;
-                n) result+=$'\n' ;;
-                r) result+=$'\r' ;;
-                t) result+=$'\t' ;;
-                *) result+="$next" ;;
+            "\\") result+="\\" ;;
+            '"') result+='"' ;;
+            n) result+=$'\n' ;;
+            r) result+=$'\r' ;;
+            t) result+=$'\t' ;;
+            *) result+="$next" ;;
             esac
         else
             result+="$char"
@@ -125,7 +125,7 @@ login() {
 
     # Emulate browser: GET the form page to initialize session server-side
     curl -c "$COOKIE_FILE" -b "$COOKIE_FILE" -skL \
-         "${PORTAL}/fgtauth?${magic}" -o /dev/null
+        "${PORTAL}/fgtauth?${magic}" -o /dev/null
 
     # Emulate browser: Submit the form to / (exactly as the form action="/" specifies)
     log "Submitting credentials..."
@@ -148,7 +148,7 @@ login() {
             "${PORTAL}/keepalive?${keepalive}" -o /dev/null
     else
         log "Warning: No keepalive redirect found. Fortinet might have rejected the login."
-        echo "$post_resp" > "/tmp/fortinet_error_$(id -u).html"
+        echo "$post_resp" >"/tmp/fortinet_error_$(id -u).html"
     fi
 
     sleep 2

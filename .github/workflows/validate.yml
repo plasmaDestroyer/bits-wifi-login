@@ -1,0 +1,80 @@
+name: Validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  shell:
+    name: Shell (bash-n / shellcheck / shfmt / tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shfmt
+        run: sudo apt-get install -y shfmt
+
+      - name: Syntax check (bash -n)
+        run: |
+          bash -n fortinet-login.sh
+          bash -n linux/install.sh
+          bash -n linux/uninstall.sh
+          bash -n linux/remote-install.sh
+          bash -n mac/install.sh
+          bash -n mac/uninstall.sh
+          bash -n mac/remote-install.sh
+
+      - name: Lint (shellcheck)
+        run: |
+          shellcheck fortinet-login.sh
+          shellcheck linux/install.sh linux/uninstall.sh linux/remote-install.sh
+          shellcheck mac/install.sh mac/uninstall.sh mac/remote-install.sh
+
+      - name: Format check (shfmt)
+        run: shfmt -d -i 4 fortinet-login.sh linux/ mac/
+
+      - name: Token extraction tests
+        run: bash tests/test_token_extraction.sh
+
+  powershell:
+    name: PowerShell (AST / PSScriptAnalyzer)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Syntax check (AST)
+        shell: pwsh
+        run: |
+          $files = @(
+            "windows/install.ps1",
+            "windows/uninstall.ps1",
+            "windows/fortinet-login.ps1",
+            "windows/remote-install.ps1"
+          )
+          $hasErrors = $false
+          foreach ($f in $files) {
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $f), [ref]$null, [ref]$errors
+            )
+            if ($errors.Count -gt 0) {
+              Write-Host "Syntax errors in $f" -ForegroundColor Red
+              $errors | ForEach-Object { Write-Host $_ }
+              $hasErrors = $true
+            }
+          }
+          if ($hasErrors) { exit 1 }
+          Write-Host "All PS files parsed OK." -ForegroundColor Green
+
+      - name: Lint (PSScriptAnalyzer)
+        shell: pwsh
+        run: |
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          $results = Invoke-ScriptAnalyzer -Path windows/ -Recurse -Severity Warning,Error
+          if ($results) {
+            $results | Format-Table -AutoSize
+            exit 1
+          }
+          Write-Host "PSScriptAnalyzer: no issues." -ForegroundColor Green

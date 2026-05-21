@@ -59,7 +59,7 @@ if [[ ! -f "${SCRIPT_DIR}/creds.conf" ]]; then
         escape_creds_value "$input_user"
         printf "PASSWORD="
         escape_creds_value "$input_pass"
-    } > "${SCRIPT_DIR}/creds.conf"
+    } >"${SCRIPT_DIR}/creds.conf"
     chmod 600 "${SCRIPT_DIR}/creds.conf"
     [[ -f "${SCRIPT_DIR}/creds.conf" ]]
     log "✓ creds.conf created."
@@ -77,7 +77,7 @@ log "✓ Script permissions set."
 
 mkdir -p ~/Library/LaunchAgents
 
-cat > "$PLIST" << EOF
+cat >"$PLIST" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

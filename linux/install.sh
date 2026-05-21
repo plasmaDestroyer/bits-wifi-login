@@ -51,7 +51,7 @@ if [[ ! -f "${SCRIPT_DIR}/creds.conf" ]]; then
         escape_creds_value "$input_user"
         printf "PASSWORD="
         escape_creds_value "$input_pass"
-    } > "${SCRIPT_DIR}/creds.conf"
+    } >"${SCRIPT_DIR}/creds.conf"
     chmod 600 "${SCRIPT_DIR}/creds.conf"
     log "✓ creds.conf created."
 else
@@ -65,7 +65,7 @@ log "✓ Script permissions set."
 
 # ── NetworkManager dispatcher ─────────────────────────────────────────────────
 
-sudo tee /etc/NetworkManager/dispatcher.d/90-fortinet-login > /dev/null << EOF
+sudo tee /etc/NetworkManager/dispatcher.d/90-fortinet-login >/dev/null <<EOF
 #!/usr/bin/env bash
 CURRENT_SSID=\$(nmcli -t -f active,ssid dev wifi 2>/dev/null | grep '^yes' | cut -d: -f2)
 if [[ "\$2" == "up" ]] && [[ "\$CURRENT_SSID" =~ ^BITS-(STUDENT|STAFF)$ ]]; then
@@ -89,7 +89,7 @@ log "✓ NetworkManager dispatcher installed."
 
 # ── Resume service ────────────────────────────────────────────────────────────
 
-sudo tee /etc/systemd/system/bits-wifi-login-resume.service > /dev/null << EOF
+sudo tee /etc/systemd/system/bits-wifi-login-resume.service >/dev/null <<EOF
 [Unit]
 Description=BITS WiFi Login after resume
 After=suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
@@ -117,7 +117,7 @@ log "✓ Resume service installed."
 
 # ── systemd service ───────────────────────────────────────────────────────────
 
-sudo tee /etc/systemd/system/bits-wifi-login.service > /dev/null << EOF
+sudo tee /etc/systemd/system/bits-wifi-login.service >/dev/null <<EOF
 [Unit]
 Description=BITS WiFi Fortinet Login
 After=network-online.target
@@ -137,7 +137,7 @@ log "✓ systemd service installed."
 
 # ── systemd timer (every 30 min for session expiry) ───────────────────────────
 
-sudo tee /etc/systemd/system/bits-wifi-login.timer > /dev/null << EOF
+sudo tee /etc/systemd/system/bits-wifi-login.timer >/dev/null <<EOF
 [Unit]
 Description=BITS WiFi Login periodic check
 
