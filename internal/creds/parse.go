@@ -12,6 +12,8 @@ type Creds struct {
 func Parse(content string) (Creds, error) {
 	creds := Creds{}
 
+	content = strings.TrimPrefix(content, "\ufeff")
+
 	for line := range strings.SplitSeq(content, "\n") {
 		parts := strings.SplitN(line, "=", 2)
 
