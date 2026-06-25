@@ -9,6 +9,9 @@ func TestUnescape(t *testing.T) {
 		want string
 	}{
 		{"passthrough", "abc", "abc"},
+		{"escaped quote", `a\"b`, `a"b`},
+		{"unknown escape", `a\xb`, `axb`},
+		{"trailing backslash", `abc\`, `abc\`},
 		{"escaped backslash", `a\\b`, `a\b`},
 		{"newline", `a\nb`, "a\nb"},
 		{"carriage return", `a\rb`, "a\rb"},
