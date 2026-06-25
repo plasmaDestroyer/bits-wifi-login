@@ -65,3 +65,25 @@ func TestMagicFromForm(t *testing.T) {
 		})
 	}
 }
+
+func TestKeepaliveFromBody(t *testing.T) {
+	cases := []struct {
+		name      string
+		in        string
+		wantToken string
+		wantOK    bool
+	}{
+		{"login failure", `name="magic" value="deadbeef12345678"`, "", false},
+		{"login success", `location.href="https://fw.bits-pilani.ac.in:8090/keepalive?cafebabe87654321";`, "cafebabe87654321", true},
+		{"no token", "https://example.com/", "", false},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, ok := keepaliveFromBody(c.in)
+			if got != c.wantToken || ok != c.wantOK {
+				t.Errorf("magicFromRedirect(%q) = (%q, %v), want (%q, %v)", c.in, got, ok, c.wantToken, c.wantOK)
+			}
+		})
+	}
+}
