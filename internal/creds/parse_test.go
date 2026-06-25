@@ -13,6 +13,11 @@ func TestParse(t *testing.T) {
 		{"missing password", "USERNAME=\"x\"\nPASSWORD=", Creds{}, true},
 		{"single quoted", "USERNAME='alice'\nPASSWORD='secret'", Creds{"alice", "secret"}, false},
 		{"utf-8 bom", "\ufeffUSERNAME=\"x\"\nPASSWORD=\"y\"", Creds{"x", "y"}, false},
+		{"bare value", "USERNAME=alice\nPASSWORD=secret", Creds{"alice", "secret"}, false},
+		{"last key wins", "USERNAME=first\nUSERNAME=alice\nPASSWORD=secret", Creds{"alice", "secret"}, false},
+		{"equals in value", "USERNAME=alice\nPASSWORD=a=b=c", Creds{"alice", "a=b=c"}, false},
+		{"crlf line endings", "USERNAME=alice\r\nPASSWORD=secret", Creds{"alice", "secret"}, false},
+		{"spaces inside quotes", "USERNAME=\"  alice  \"\nPASSWORD=\"secret\"", Creds{"  alice  ", "secret"}, false},
 	}
 
 	for _, c := range cases {
