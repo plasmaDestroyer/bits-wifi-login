@@ -9,6 +9,10 @@ func unescape(s string) string {
 				res = append(res, '\\')
 			case 'n':
 				res = append(res, '\n')
+			case 'r':
+				res = append(res, '\r')
+			case 't':
+				res = append(res, '\t')
 			default:
 				res = append(res, s[i+1])
 			}

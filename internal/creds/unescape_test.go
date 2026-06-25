@@ -11,6 +11,8 @@ func TestUnescape(t *testing.T) {
 		{"passthrough", "abc", "abc"},
 		{"escaped backslash", `a\\b`, `a\b`},
 		{"newline", `a\nb`, "a\nb"},
+		{"carriage return", `a\rb`, "a\rb"},
+		{"tab", `a\tb`, "a\tb"},
 	}
 
 	for _, c := range cases {
