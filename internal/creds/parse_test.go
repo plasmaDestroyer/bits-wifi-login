@@ -11,6 +11,7 @@ func TestParse(t *testing.T) {
 	}{
 		{"happy path", "USERNAME=\"alice\"\nPASSWORD=\"secret\"", Creds{Username: "alice", Password: "secret"}, false},
 		{"missing password", "USERNAME=\"x\"\nPASSWORD=", Creds{}, true},
+		{"single quoted", "USERNAME='alice'\nPASSWORD='secret'", Creds{"alice", "secret"}, false},
 	}
 
 	for _, c := range cases {

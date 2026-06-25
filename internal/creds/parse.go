@@ -23,6 +23,8 @@ func Parse(content string) (Creds, error) {
 
 		if len(value) >= 2 && value[0] == '"' && value[len(value)-1] == '"' {
 			value = unescape(value[1 : len(value)-1])
+		} else if len(value) >= 2 && value[0] == '\'' && value[len(value)-1] == '\'' {
+			value = value[1 : len(value)-1]
 		}
 
 		switch key {
