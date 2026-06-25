@@ -2,13 +2,15 @@ package creds
 
 import "testing"
 
-func TestUnescapePassthrough(t *testing.T) {
+func TestUnescape(t *testing.T) {
 	cases := []struct {
 		name string
 		in   string
 		want string
 	}{
 		{"passthrough", "abc", "abc"},
+		{"escaped backslash", `a\\b`, `a\b`},
+		{"newline", `a\nb`, "a\nb"},
 	}
 
 	for _, c := range cases {
