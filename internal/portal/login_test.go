@@ -24,6 +24,15 @@ func TestMagicToken(t *testing.T) {
 			wantWhich: "redirect",
 			wantOk: true,
 		},
+		{
+			name: "body",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				w.Write([]byte("var magic=deadbeef12345678;"))
+			},
+			wantToken: "deadbeef12345678",
+			wantWhich: "body",
+			wantOk:    true,
+		},
 	}
 
 	for _, c := range cases {
