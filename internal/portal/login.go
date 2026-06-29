@@ -1,6 +1,20 @@
 package portal
 
-import "io"
+import (
+	"errors"
+	"io"
+
+	"github.com/plasmaDestroyer/bits-wifi-login/internal/creds"
+)
+
+func (p *Portal) Login(c creds.Creds) error {
+	_, _, ok := p.magicToken();
+	if !ok {
+		return errors.New("portal: no magic token found")
+	}
+
+	return nil
+}
 
 func (p *Portal) magicToken() (string, string, bool) {
 	res, err := p.client.Get(p.connectivityURL)

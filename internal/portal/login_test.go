@@ -4,7 +4,48 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/plasmaDestroyer/bits-wifi-login/internal/creds"
 )
+
+func TestLogin(t *testing.T) {
+	cases := []struct {
+		name string
+		handler http.HandlerFunc
+		wantErr bool
+	}{
+		{
+			name: "no magic token",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				w.Write([]byte("nothing useful"))
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			srv := httptest.NewServer(c.handler)
+			defer srv.Close()
+
+			client := srv.Client()
+			client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse
+			}
+
+			p := Portal{
+				client: client,
+				connectivityURL: srv.URL,
+				baseURL: srv.URL,
+			}
+
+			err := p.Login(creds.Creds{Username: "u", Password: "p"})
+			if (err != nil) != c.wantErr {
+				t.Errorf("Login() error = %v, wantErr %v", err, c.wantErr)
+			}
+		})
+	}
+}
 
 func TestMagicToken(t *testing.T) {
 	cases := []struct {
