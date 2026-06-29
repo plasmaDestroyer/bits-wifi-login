@@ -34,4 +34,3 @@ func TestIsLoggedIn(t *testing.T) {
 		})
 	}
 }
-
