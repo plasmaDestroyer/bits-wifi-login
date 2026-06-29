@@ -21,5 +21,19 @@ func (p *Portal) magicToken() (string, string, bool) {
 		return token, "body", true
 	}
 
+	res2, err := p.client.Get(p.baseURL)
+	if err != nil {
+		return "", "", false
+	}
+	defer res2.Body.Close()
+
+	formBody, err := io.ReadAll(res2.Body)
+	if err != nil {
+		return "", "", false
+	}
+	if token, ok := magicFromForm(string(formBody)); ok {
+		return token, "form", true
+	}
+
 	return "", "", false
 }

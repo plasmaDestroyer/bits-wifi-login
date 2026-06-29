@@ -33,6 +33,15 @@ func TestMagicToken(t *testing.T) {
 			wantWhich: "body",
 			wantOk:    true,
 		},
+		{
+			name: "form",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				w.Write([]byte(`<input type="hidden" name="magic" value="deadbeef12345678">`))
+			},
+			wantToken: "deadbeef12345678",
+			wantWhich: "form",
+			wantOk:    true,
+		},
 	}
 
 	for _, c := range cases {
@@ -48,6 +57,7 @@ func TestMagicToken(t *testing.T) {
 			p := Portal{
 				client:          client,
 				connectivityURL: srv.URL,
+				baseURL: 		 srv.URL,
 			}
 
 			token, which, ok := p.magicToken()
