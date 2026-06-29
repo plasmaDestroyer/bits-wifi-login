@@ -42,6 +42,15 @@ func TestMagicToken(t *testing.T) {
 			wantWhich: "form",
 			wantOk:    true,
 		},
+		{
+			name: "no token",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				w.Write([]byte("nothing useful here"))
+			},
+			wantToken: "",
+			wantWhich: "",
+			wantOk:    false,
+		},
 	}
 
 	for _, c := range cases {
