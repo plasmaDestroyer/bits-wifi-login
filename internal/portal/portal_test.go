@@ -24,7 +24,7 @@ func TestIsLoggedIn(t *testing.T) {
 			defer srv.Close()
 
 			p := Portal{
-				client:          srv.Client(),
+				noFollow:        srv.Client(),
 				connectivityURL: srv.URL,
 			}
 

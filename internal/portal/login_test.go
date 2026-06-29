@@ -10,7 +10,7 @@ import (
 
 func TestLogin(t *testing.T) {
 	cases := []struct {
-		name string
+		name    string
 		handler http.HandlerFunc
 		wantErr bool
 	}{
@@ -34,9 +34,9 @@ func TestLogin(t *testing.T) {
 			}
 
 			p := Portal{
-				client: client,
+				noFollow:        client,
 				connectivityURL: srv.URL,
-				baseURL: srv.URL,
+				baseURL:         srv.URL,
 			}
 
 			err := p.Login(creds.Creds{Username: "u", Password: "p"})
@@ -49,21 +49,21 @@ func TestLogin(t *testing.T) {
 
 func TestMagicToken(t *testing.T) {
 	cases := []struct {
-		name   string
-		handler http.HandlerFunc
+		name      string
+		handler   http.HandlerFunc
 		wantToken string
 		wantWhich string
-		wantOk  bool
+		wantOk    bool
 	}{
 		{
 			name: "redirect",
 			handler: func(w http.ResponseWriter, r *http.Request) {
-    			w.Header().Set("Location", "/fgtauth?deadbeef12345678")
-       			w.WriteHeader(http.StatusFound)
+				w.Header().Set("Location", "/fgtauth?deadbeef12345678")
+				w.WriteHeader(http.StatusFound)
 			},
 			wantToken: "deadbeef12345678",
 			wantWhich: "redirect",
-			wantOk: true,
+			wantOk:    true,
 		},
 		{
 			name: "body",
@@ -105,9 +105,9 @@ func TestMagicToken(t *testing.T) {
 			}
 
 			p := Portal{
-				client:          client,
+				noFollow:        client,
 				connectivityURL: srv.URL,
-				baseURL: 		 srv.URL,
+				baseURL:         srv.URL,
 			}
 
 			token, which, ok := p.magicToken()

@@ -8,7 +8,7 @@ import (
 )
 
 func (p *Portal) Login(c creds.Creds) error {
-	_, _, ok := p.magicToken();
+	_, _, ok := p.magicToken()
 	if !ok {
 		return errors.New("portal: no magic token found")
 	}
@@ -17,7 +17,7 @@ func (p *Portal) Login(c creds.Creds) error {
 }
 
 func (p *Portal) magicToken() (string, string, bool) {
-	res, err := p.client.Get(p.connectivityURL)
+	res, err := p.noFollow.Get(p.connectivityURL)
 	if err != nil {
 		return "", "", false
 	}
@@ -35,7 +35,7 @@ func (p *Portal) magicToken() (string, string, bool) {
 		return token, "body", true
 	}
 
-	res2, err := p.client.Get(p.baseURL)
+	res2, err := p.noFollow.Get(p.baseURL)
 	if err != nil {
 		return "", "", false
 	}
