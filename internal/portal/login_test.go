@@ -21,6 +21,21 @@ func TestLogin(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "creds rejected",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				switch {
+					case r.Method == http.MethodGet && r.URL.Path == "/": // probe
+					w.Header().Set("Location", "/fgtauth?deadbeef12345678")
+					w.WriteHeader(http.StatusFound)
+					case r.URL.Path == "/fgtauth": // session init
+					w.WriteHeader(http.StatusOK)
+					case r.Method == http.MethodPost && r.URL.Path == "/": // creds rejected: no keepalive
+					w.Write([]byte("authentication failed"))
+				}
+			},
+			wantErr: true,
+		},
 	}
 
 	for _, c := range cases {
@@ -35,6 +50,7 @@ func TestLogin(t *testing.T) {
 
 			p := Portal{
 				noFollow:        client,
+				follow: 		 &http.Client{},
 				connectivityURL: srv.URL,
 				baseURL:         srv.URL,
 			}
