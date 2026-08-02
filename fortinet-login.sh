@@ -11,6 +11,19 @@ fi
 CREDS_FILE="${SCRIPT_DIR}/creds.conf"
 PORTAL="https://fw.bits-pilani.ac.in:8090"
 
+# TLS verification is ON by default — credentials are POSTed to the portal.
+# If the portal certificate is not trusted by this machine, set BITS_INSECURE=1.
+# ponytail: env escape hatch beats pinning; swap for --cacert if a CA ever ships.
+TLS_OPT=()
+if [[ "${BITS_INSECURE:-0}" == "1" ]]; then
+    TLS_OPT=(-k)
+fi
+
+tls_hint() {
+    [[ "${BITS_INSECURE:-0}" == "1" ]] && return 0
+    log "  If the portal certificate is untrusted, retry with BITS_INSECURE=1 (disables TLS verification)."
+}
+
 # Set strict permissions for newly created sensitive files (cookies, error logs)
 umask 077
 
@@ -89,7 +102,7 @@ is_bits_ssid() {
 
 is_logged_in() {
     local code
-    code=$(curl -sk --max-time 5 -o /dev/null -w "%{http_code}" \
+    code=$(curl -s "${TLS_OPT[@]}" --max-time 5 -o /dev/null -w "%{http_code}" \
         "http://connectivitycheck.gstatic.com/generate_204")
     [[ "$code" == "204" ]]
 }
@@ -97,16 +110,16 @@ is_logged_in() {
 get_magic_token() {
     local magic
     # 1. Try captive portal redirect URL
-    magic=$(curl -sk --max-time 10 -o /dev/null -w "%{redirect_url}" "http://connectivitycheck.gstatic.com/generate_204" | grep -ioE 'fgtauth\?[a-f0-9]+' | cut -d? -f2 || true)
+    magic=$(curl -s "${TLS_OPT[@]}" --max-time 10 -o /dev/null -w "%{redirect_url}" "http://connectivitycheck.gstatic.com/generate_204" | grep -ioE 'fgtauth\?[a-f0-9]+' | cut -d? -f2 || true)
 
     # 2. Try HTML body of the intercept page (if Fortinet returns 200 OK + meta refresh)
     if [[ -z "$magic" ]]; then
-        magic=$(curl -sk --max-time 10 "http://connectivitycheck.gstatic.com/generate_204" | grep -ioE '(magic=|fgtauth\?)[a-f0-9]+' | head -n 1 | awk -F'[?=]' '{print $2}' || true)
+        magic=$(curl -s "${TLS_OPT[@]}" --max-time 10 "http://connectivitycheck.gstatic.com/generate_204" | grep -ioE '(magic=|fgtauth\?)[a-f0-9]+' | head -n 1 | awk -F'[?=]' '{print $2}' || true)
     fi
 
     # 3. Fallback: Hit the portal directly and scrape the hidden input value
     if [[ -z "$magic" ]]; then
-        magic=$(curl -sk --max-time 10 "${PORTAL}/" | grep -ioE 'name="magic"[[:space:]]+value="?[a-f0-9]+' | grep -ioE '[a-f0-9]+$' | head -n 1 || true)
+        magic=$(curl -s "${TLS_OPT[@]}" --max-time 10 "${PORTAL}/" | grep -ioE 'name="magic"[[:space:]]+value="?[a-f0-9]+' | grep -ioE '[a-f0-9]+$' | head -n 1 || true)
     fi
 
     echo "$magic"
@@ -118,20 +131,21 @@ login() {
 
     if [[ -z "$magic" ]]; then
         log "Could not get magic token — captive portal not detected (already logged in, or portal unreachable)."
+        tls_hint
         return 1
     fi
 
     log "Got magic token: $magic"
 
     # Emulate browser: GET the form page to initialize session server-side
-    curl -c "$COOKIE_FILE" -b "$COOKIE_FILE" -skL \
+    curl -c "$COOKIE_FILE" -b "$COOKIE_FILE" -sL "${TLS_OPT[@]}" \
         "${PORTAL}/fgtauth?${magic}" -o /dev/null
 
     # Emulate browser: Submit the form to / (exactly as the form action="/" specifies)
     log "Submitting credentials..."
     local post_resp http_code post_body
     post_body=$(mktemp)
-    http_code=$(curl -c "$COOKIE_FILE" -b "$COOKIE_FILE" -sk \
+    http_code=$(curl -c "$COOKIE_FILE" -b "$COOKIE_FILE" -s "${TLS_OPT[@]}" \
         -X POST \
         "${PORTAL}/" \
         --data-urlencode "username=${USERNAME}" \
@@ -151,7 +165,7 @@ login() {
 
     if [[ -n "$keepalive" ]]; then
         log "Credentials accepted! Found keepalive logic, activating connection..."
-        curl -c "$COOKIE_FILE" -b "$COOKIE_FILE" -skL \
+        curl -c "$COOKIE_FILE" -b "$COOKIE_FILE" -sL "${TLS_OPT[@]}" \
             "${PORTAL}/keepalive?${keepalive}" -o /dev/null
     else
         echo "$post_resp" >"$error_file"
@@ -159,6 +173,7 @@ login() {
             log "✗ Portal rejected credentials — wrong username or password."
         else
             log "✗ No keepalive found — unexpected portal response (HTTP $http_code)."
+            [[ "$http_code" == "000" ]] && tls_hint
         fi
         log "  Response saved to $error_file — attach when reporting a bug."
     fi

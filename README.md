@@ -37,6 +37,19 @@ That's it. From now on, whenever your device connects to `BITS-STUDENT` (or `BIT
 
 If something breaks (missing files, broken hooks, permission errors, or partial installs), just **re-run the install script** for your OS. It will detect existing components and repair or re-register them as needed.
 
+### Certificate errors
+
+Your credentials are sent to the portal over HTTPS with **TLS verification enabled**. If the portal's certificate isn't trusted by your machine, login fails with `HTTP 000` and the script tells you so.
+
+The right fix is to install the CA that signed the portal certificate. As a temporary workaround you can skip verification:
+
+```bash
+BITS_INSECURE=1 ./fortinet-login.sh    # Linux / macOS
+$env:BITS_INSECURE=1; .\fortinet-login.ps1    # Windows
+```
+
+This disables certificate checks for that run — only do it on the campus network, and only if you understand that it exposes your credentials to interception.
+
 ## 💡 Good to know
 
 *   **Linux:** Fully tested and works fine (I use Arch btw 😉).

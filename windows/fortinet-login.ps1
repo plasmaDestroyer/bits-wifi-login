@@ -8,6 +8,11 @@ $RunId = "{0}_{1}" -f $env:USERNAME, $PID
 $CookieFile = Join-Path $env:TEMP "fortinet_cookies_$RunId.txt"
 $DebugFile = Join-Path $env:TEMP "fortinet_debug_$RunId.html"
 
+# TLS verification is ON by default -- credentials are POSTed to the portal.
+# If the portal certificate is not trusted by this machine, set BITS_INSECURE=1.
+# ponytail: env escape hatch beats pinning; swap for --cacert if a CA ever ships.
+$TlsOpt = if ($env:BITS_INSECURE -eq '1') { @('-k') } else { @() }
+
 function Log {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '')]
     param([string]$Message)
@@ -102,6 +107,11 @@ function Get-CurrentSsid {
     return "Unknown"
 }
 
+function Write-TlsHint {
+    if ($env:BITS_INSECURE -eq '1') { return }
+    Log "  If the portal certificate is untrusted, retry with BITS_INSECURE=1 (disables TLS verification)."
+}
+
 function Test-BitsSsid {
     param([string]$Ssid)
 
@@ -109,24 +119,24 @@ function Test-BitsSsid {
 }
 
 function Test-LoggedIn {
-    $code = curl.exe -sk --max-time 5 -o NUL -w "%{http_code}" $CHECK_URL
+    $code = curl.exe -s @TlsOpt --max-time 5 -o NUL -w "%{http_code}" $CHECK_URL
     Log "Check: Connectivity status code is $code"
     return ($code -eq "204")
 }
 
 function Get-MagicToken {
-    $redirect = curl.exe -sk --max-time 10 -o NUL -w "%{redirect_url}" $CHECK_URL
+    $redirect = curl.exe -s @TlsOpt --max-time 10 -o NUL -w "%{redirect_url}" $CHECK_URL
     Log "Debug: Redirect URL received: $redirect"
     if ($redirect -match 'magic=([a-f0-9]+)') { return $Matches[1] }
     if ($redirect -match 'fgtauth\?([a-f0-9]+)') { return $Matches[1] }
 
     Log "Debug: No redirect header found, checking HTML body..."
-    $body = curl.exe -sk --max-time 10 $CHECK_URL
+    $body = curl.exe -s @TlsOpt --max-time 10 $CHECK_URL
     if ($body -match 'magic=([a-f0-9]+)') { return $Matches[1] }
     if ($body -match 'fgtauth\?([a-f0-9]+)') { return $Matches[1] }
 
     Log "Debug: Still no magic token, querying portal directly..."
-    $portalBody = curl.exe -sk --max-time 10 "${PORTAL}/"
+    $portalBody = curl.exe -s @TlsOpt --max-time 10 "${PORTAL}/"
     if ($portalBody -match 'name="magic"\s+value="([a-f0-9]+)"') {
         return $Matches[1]
     }
@@ -138,16 +148,17 @@ function Login {
     $magic = Get-MagicToken
     if (-not $magic) {
         Log "Could not get magic token -- captive portal not detected (already logged in, or portal unreachable)."
+        Write-TlsHint
         return $false
     }
     Log "Got magic token: $magic"
 
     Log "Step 1: Initializing session via fgtauth..."
-    curl.exe -c "$CookieFile" -b "$CookieFile" -skL "${PORTAL}/fgtauth?${magic}" -o NUL
+    curl.exe -c "$CookieFile" -b "$CookieFile" -sL @TlsOpt "${PORTAL}/fgtauth?${magic}" -o NUL
 
     Log "Step 2: Submitting credentials for user $script:USERNAME..."
     $postBodyFile = Join-Path $env:TEMP "fortinet_body_$RunId.tmp"
-    $httpCode = curl.exe -c "$CookieFile" -b "$CookieFile" -sk -X POST "${PORTAL}/" `
+    $httpCode = curl.exe -c "$CookieFile" -b "$CookieFile" -s @TlsOpt -X POST "${PORTAL}/" `
         --data-urlencode "username=$script:USERNAME" `
         --data-urlencode "password=$script:PASSWORD" `
         --data "magic=$magic" `
@@ -163,13 +174,14 @@ function Login {
         Log "Credentials accepted. Keepalive token: $keepalive"
 
         Log "Step 3: Activating connection..."
-        curl.exe -c "$CookieFile" -b "$CookieFile" -skL "${PORTAL}/keepalive?${keepalive}" -o NUL
+        curl.exe -c "$CookieFile" -b "$CookieFile" -sL @TlsOpt "${PORTAL}/keepalive?${keepalive}" -o NUL
     } else {
         $postResponse | Out-File $DebugFile -Encoding UTF8
         if ($postResponse -match 'invalid.{0,30}(credential|password|user)|wrong.{0,20}(password|user)|authentication.{0,20}fail|please.{0,10}try.{0,10}again|login.{0,10}fail') {
             Log "[X] Portal rejected credentials -- wrong username or password."
         } else {
             Log "[X] No keepalive found -- unexpected portal response (HTTP $httpCode)."
+            if ($httpCode -eq "000") { Write-TlsHint }
         }
         Log "  Response saved to $DebugFile -- attach when reporting a bug."
     }
