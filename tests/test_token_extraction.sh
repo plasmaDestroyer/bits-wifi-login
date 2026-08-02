@@ -49,6 +49,12 @@ assert_eq "keepalive token extracted on success" "cafebabe87654321" "$keepalive"
 keepalive=$(grep -m 1 -ioE 'keepalive\?[a-f0-9]+' "$FIXTURES_DIR/login_failure.html" | cut -d? -f2 || true)
 assert_eq "no keepalive token on failure" "" "$keepalive"
 
+# TLS verification stays on unless BITS_INSECURE=1 (issue #9): no hardcoded -k
+ROOT_DIR="$(dirname "$(dirname "$(readlink -f "$0")")")"
+hardcoded=$(grep -hE 'curl(\.exe)? ' "$ROOT_DIR/fortinet-login.sh" "$ROOT_DIR/windows/fortinet-login.ps1" |
+    grep -cE '(^| )-[a-zA-Z]*k' || true)
+assert_eq "no hardcoded -k in curl calls" "0" "$hardcoded"
+
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
 [[ $FAIL -eq 0 ]]
