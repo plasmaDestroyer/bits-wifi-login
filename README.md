@@ -1,6 +1,8 @@
-# BITS Wifi Auto-Login Script
+# BITS Wifi Auto-Login
 
-This script automatically logs you into the BITS Pilani Fortinet Captive Portal (`BITS-STUDENT` & `BITS-STAFF` Wi-Fi networks) in the background when your device connects to the network.
+Automatically logs you into the BITS Pilani Fortinet Captive Portal (`BITS-STUDENT` & `BITS-STAFF` Wi-Fi networks) in the background when your device connects to the network.
+
+It's a single small Go binary with no runtime dependencies — the installer downloads the prebuilt one for your platform and wires up your OS's native background triggers around it.
 
 ## ⚙️ Installation & Setup
 
@@ -43,6 +45,19 @@ If something breaks (missing files, broken hooks, permission errors, or partial 
 *   **macOS:** Should work well since it's essentially the same as linux.
 *   **Windows:** Added recently, it should work great, though I haven't used it much as compared to linux.
 *   **Issues?** If facing any issues, feel free to reach out to me or [open an issue on GitHub](https://github.com/plasmaDestroyer/bits-wifi-login/issues).
+
+## 🛠️ Building from source
+
+Only needed if there's no prebuilt binary for your platform, or you're hacking on it:
+
+```bash
+git clone https://github.com/plasmaDestroyer/bits-wifi-login
+cd bits-wifi-login
+go build -o bits-wifi-login ./cmd/bits-wifi-login
+./linux/install.sh        # or mac/install.sh, or windows/install.ps1 as Administrator
+```
+
+The installers look for the binary in the repo root and refuse to run without it.
 
 
 #### **Cheers 🍻**
