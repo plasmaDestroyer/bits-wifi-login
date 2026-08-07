@@ -1,6 +1,55 @@
 package portal
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+// TestFixtures runs the extractors against captured portal HTML rather than the
+// hand-written snippets above — the snippets pin the regex, these pin the shapes
+// the real portal has actually served.
+func TestFixtures(t *testing.T) {
+	cases := []struct {
+		file      string
+		extract   func(string) (string, bool)
+		wantToken string
+		wantOK    bool
+	}{
+		{"intercept_fgtauth.html", magicFromBody, "deadbeef12345678", true},
+		{"intercept_magic.html", magicFromBody, "deadbeef12345678", true},
+		{"portal_form.html", magicFromForm, "deadbeef12345678", true},
+		{"login_success.html", keepaliveFromBody, "cafebabe87654321", true},
+		{"login_failure.html", keepaliveFromBody, "", false},
+	}
+
+	for _, c := range cases {
+		t.Run(c.file, func(t *testing.T) {
+			body, err := os.ReadFile(filepath.Join("testdata", c.file))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			got, ok := c.extract(string(body))
+			if got != c.wantToken || ok != c.wantOK {
+				t.Errorf("%s = (%q, %v), want (%q, %v)", c.file, got, ok, c.wantToken, c.wantOK)
+			}
+		})
+	}
+}
+
+// The failure page must also be recognised as a credential rejection, not as an
+// unexpected response.
+func TestFixtureLoginFailureIsCredentialRejection(t *testing.T) {
+	body, err := os.ReadFile(filepath.Join("testdata", "login_failure.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !rejectRe.Match(body) {
+		t.Error("login_failure.html not matched by rejectRe — would be reported as an unexpected response")
+	}
+}
 
 func TestMagicFromRedirect(t *testing.T) {
 	cases := []struct {
