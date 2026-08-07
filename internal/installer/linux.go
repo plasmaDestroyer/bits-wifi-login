@@ -9,6 +9,8 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -41,13 +43,22 @@ var units = []string{
 	"bits-wifi-login-resume.service",
 }
 
-func preflight() error {
+// The dispatcher script runs as root and embeds this path in a `su -c` string,
+// and systemd splits ExecStart on whitespace. Both make an unusual path a real
+// problem, so refuse it up front with an actionable message.
+var unsafePath = regexp.MustCompile("[\\s\"'`$\\\\;&|<>()\n]")
+
+func preflight(exe string) error {
 	if _, err := exec.LookPath("nmcli"); err != nil {
 		return errors.New("installer: NetworkManager (nmcli) not found — is this an NM-managed system?")
 	}
 
 	if os.Geteuid() == 0 {
 		return errors.New("installer: do not run this with sudo — it will ask for your password when it needs root, and creds.conf must stay owned by you")
+	}
+
+	if unsafePath.MatchString(exe) {
+		return fmt.Errorf("installer: refusing to install from %q — the path must not contain spaces or shell metacharacters. Move the binary somewhere plainer and re-run", exe)
 	}
 
 	return nil
@@ -59,9 +70,22 @@ func install(exe string) error {
 		return fmt.Errorf("installer: cannot determine the current user: %w", err)
 	}
 
+	// The dispatcher's output used to go to a predictable /tmp path, which any
+	// local user could pre-create as a symlink. Keep it under the user's own
+	// state dir instead; the systemd units are covered by journald already.
+	logDir := filepath.Join(u.HomeDir, ".local", "state", "bits-wifi-login")
+	if err := os.MkdirAll(logDir, 0700); err != nil {
+		return fmt.Errorf("installer: creating %s: %w", logDir, err)
+	}
+	logPath := filepath.Join(logDir, "dispatcher.log")
+
+	if unsafePath.MatchString(logPath) {
+		return fmt.Errorf("installer: refusing to use log path %q — it must not contain spaces or shell metacharacters", logPath)
+	}
+
 	fmt.Println("Installing background triggers (sudo may prompt)...")
 
-	if err := sudoWrite(dispatcherPath, dispatcher(exe, u.Username), "0755"); err != nil {
+	if err := sudoWrite(dispatcherPath, dispatcher(exe, u.Username, logPath), "0755"); err != nil {
 		return err
 	}
 	fmt.Println("✓ NetworkManager dispatcher installed.")
@@ -122,14 +146,15 @@ func summary() string {
 		"    - Every resume from suspend/sleep (systemd resume service)\n" +
 		"    - Every 30 minutes (systemd timer, persistent across sleep)\n\n" +
 		"  Logs:\n" +
-		"    journalctl -u bits-wifi-login.service --since today\n\n" +
+		"    journalctl -u bits-wifi-login.service --since today\n" +
+		"    tail ~/.local/state/bits-wifi-login/dispatcher.log\n\n" +
 		"  Repair:\n" +
 		"    Re-run `bits-wifi-login install` if triggers or permissions break.\n"
 }
 
 // The dispatcher waits for the network to actually answer before logging in —
 // NM reports "up" well before the captive portal is reachable.
-func dispatcher(exe, username string) string {
+func dispatcher(exe, username, logPath string) string {
 	return fmt.Sprintf(`#!/usr/bin/env bash
 CURRENT_SSID=$(nmcli -t -f active,ssid dev wifi 2>/dev/null | grep '^yes' | cut -d: -f2)
 if [[ "$2" == "up" ]] && [[ "$CURRENT_SSID" =~ ^BITS-(STUDENT|STAFF)$ ]]; then
@@ -140,9 +165,9 @@ if [[ "$2" == "up" ]] && [[ "$CURRENT_SSID" =~ ^BITS-(STUDENT|STAFF)$ ]]; then
         [[ $tries -ge 10 ]] && exit 0
         sleep 3
     done
-    su -c "%s >> /tmp/bits-wifi-login-%s.log 2>&1" %s
+    su -c "%s >> %s 2>&1" %s
 fi
-`, exe, username, username)
+`, exe, logPath, username)
 }
 
 func serviceUnit(exe, username string) string {

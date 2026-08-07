@@ -3,11 +3,22 @@
 package installer
 
 import (
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
+
+// The plist is XML, so a path containing & or < would produce a file plutil
+// rejects. Escape rather than forbid — macOS paths legitimately contain spaces.
+func esc(s string) string {
+	var b strings.Builder
+	xml.EscapeText(&b, []byte(s))
+
+	return b.String()
+}
 
 const label = "ac.bits.wifi-login"
 
@@ -19,9 +30,13 @@ func service() string {
 	return fmt.Sprintf("gui/%d/%s", os.Getuid(), label)
 }
 
-func preflight() error {
+func preflight(exe string) error {
 	if os.Geteuid() == 0 {
 		return errors.New("installer: do not run this with sudo — it installs a per-user LaunchAgent")
+	}
+
+	if strings.ContainsAny(exe, "\n\r") {
+		return fmt.Errorf("installer: refusing to install from %q — the path must not contain newlines", exe)
 	}
 
 	return nil
@@ -115,5 +130,5 @@ func plist(exe string) string {
     <true/>
 </dict>
 </plist>
-`, label, exe)
+`, label, esc(exe))
 }

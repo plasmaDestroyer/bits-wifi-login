@@ -23,7 +23,10 @@ func Install() error {
 		return fmt.Errorf("installer: cannot locate the running binary: %w", err)
 	}
 
-	if err := preflight(); err != nil {
+	// The binary path is interpolated into a root-run dispatcher script, a
+	// systemd unit and a cmd.exe command line. Reject anything those cannot
+	// carry safely rather than trying to quote for three grammars at once.
+	if err := preflight(exe); err != nil {
 		return err
 	}
 

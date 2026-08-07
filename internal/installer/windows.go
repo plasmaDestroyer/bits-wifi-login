@@ -25,7 +25,18 @@ const (
 // ponytail: no upfront elevation check. schtasks reports "Access is denied."
 // clearly enough, and registering a task for the current user often does not
 // need elevation at all — checking would only reject cases that work.
-func preflight() error { return nil }
+//
+// The path does get checked: it is embedded in a quoted `cmd.exe /c` string, so
+// a quote inside it would break out of the quoting. Windows filenames cannot
+// contain one, which makes this an assertion rather than a filter — but the
+// cost of being wrong is command execution, so assert it anyway.
+func preflight(exe string) error {
+	if strings.ContainsAny(exe, "\"\n\r") {
+		return fmt.Errorf("installer: refusing to install from %q — the path must not contain quotes or newlines", exe)
+	}
+
+	return nil
+}
 
 func install(exe string) error {
 	user := os.Getenv("USERDOMAIN") + `\` + os.Getenv("USERNAME")
