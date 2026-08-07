@@ -109,7 +109,7 @@ func TestRejectionError(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			err := rejectionError([]byte(c.body), 503)
+			err := rejectionError([]byte(c.body), 503, "")
 			if !strings.Contains(err.Error(), c.wantSubstr) {
 				t.Errorf("rejectionError() = %q, want it to contain %q", err, c.wantSubstr)
 			}
@@ -125,6 +125,28 @@ func TestRejectionError(t *testing.T) {
 				t.Errorf("dump file = %q, want %q", saved, c.body)
 			}
 		})
+	}
+}
+
+// The dump gets attached to bug reports, so a portal page that echoes the
+// submitted password back must not carry it into the file.
+func TestRejectionErrorRedactsPassword(t *testing.T) {
+	body := `<input name="password" value="hunter2"><p>Invalid password</p>`
+
+	err := rejectionError([]byte(body), 200, "hunter2")
+
+	path := dumpPath(t, err)
+	defer os.Remove(path)
+
+	saved, readErr := os.ReadFile(path)
+	if readErr != nil {
+		t.Fatalf("dump file %s unreadable: %v", path, readErr)
+	}
+	if strings.Contains(string(saved), "hunter2") {
+		t.Errorf("dump file leaked the password: %s", saved)
+	}
+	if !strings.Contains(string(saved), "[REDACTED]") {
+		t.Errorf("dump file = %q, want the password replaced with [REDACTED]", saved)
 	}
 }
 

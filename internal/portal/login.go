@@ -1,6 +1,7 @@
 package portal
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -19,8 +20,10 @@ func (p *Portal) Login(c creds.Creds) error {
 	}
 
 	// Which strategy fired is the evidence for pruning the other two — log it
-	// before anything downstream can fail.
-	log.Printf("magic via %s: %s", which, magic)
+	// before anything downstream can fail. The token value itself is not logged:
+	// these logs land in journald and world-readable dispatcher logs, and the
+	// strategy name is the only part worth keeping.
+	log.Printf("magic via %s", which)
 
 	authUrl := p.baseURL + "/fgtauth?" + magic
 
@@ -50,7 +53,7 @@ func (p *Portal) Login(c creds.Creds) error {
 
 	token, ok := keepaliveFromBody(string(body))
 	if !ok {
-		return rejectionError(body, res.StatusCode)
+		return rejectionError(body, res.StatusCode, c.Password)
 	}
 
 	keepaliveUrl := p.baseURL + "/keepalive?" + token
@@ -66,18 +69,29 @@ func (p *Portal) Login(c creds.Creds) error {
 
 // rejectionError distinguishes bad credentials from a portal response we don't
 // understand, and saves the body so a changed portal can be diagnosed later.
-func rejectionError(body []byte, status int) error {
+// The dump is meant to be attached to bug reports, so the password is scrubbed
+// out of it first — a Fortinet failure page re-renders the login form and there
+// is no guarantee it does not echo what was submitted.
+func rejectionError(body []byte, status int, password string) error {
 	reason := fmt.Sprintf("unexpected portal response (HTTP %d)", status)
 	if rejectRe.Match(body) {
 		reason = "portal rejected credentials — wrong username or password"
 	}
 
-	path, err := dumpBody(body)
+	path, err := dumpBody(redact(body, password))
 	if err != nil {
 		return fmt.Errorf("portal: %s", reason)
 	}
 
 	return fmt.Errorf("portal: %s (response saved to %s — attach when reporting a bug)", reason, path)
+}
+
+func redact(body []byte, password string) []byte {
+	if password == "" {
+		return body
+	}
+
+	return bytes.ReplaceAll(body, []byte(password), []byte("[REDACTED]"))
 }
 
 func dumpBody(body []byte) (string, error) {
