@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/url"
+	"os"
 
 	"github.com/plasmaDestroyer/bits-wifi-login/internal/creds"
 )
@@ -17,6 +18,10 @@ func (p *Portal) Login(c creds.Creds) error {
 		return errors.New("portal: no magic token found")
 	}
 
+	// Which strategy fired is the evidence for pruning the other two — log it
+	// before anything downstream can fail.
+	log.Printf("magic via %s: %s", which, magic)
+
 	authUrl := p.baseURL + "/fgtauth?" + magic
 
 	res, err := p.follow.Get(authUrl)
@@ -24,6 +29,8 @@ func (p *Portal) Login(c creds.Creds) error {
 		return fmt.Errorf("portal: fgtauth failed: %w", err)
 	}
 	defer res.Body.Close()
+
+	log.Print("submitting credentials...")
 
 	res, err = p.noFollow.PostForm(p.baseURL, url.Values{
 		"username": {c.Username},
@@ -43,7 +50,7 @@ func (p *Portal) Login(c creds.Creds) error {
 
 	token, ok := keepaliveFromBody(string(body))
 	if !ok {
-		return errors.New("portal: login rejected (no keepalive — wrong credentials or unexpected response)")
+		return rejectionError(body, res.StatusCode)
 	}
 
 	keepaliveUrl := p.baseURL + "/keepalive?" + token
@@ -54,9 +61,38 @@ func (p *Portal) Login(c creds.Creds) error {
 	}
 	defer res.Body.Close()
 
-	log.Printf("magic via %s", which)
-
 	return nil
+}
+
+// rejectionError distinguishes bad credentials from a portal response we don't
+// understand, and saves the body so a changed portal can be diagnosed later.
+func rejectionError(body []byte, status int) error {
+	reason := fmt.Sprintf("unexpected portal response (HTTP %d)", status)
+	if rejectRe.Match(body) {
+		reason = "portal rejected credentials — wrong username or password"
+	}
+
+	path, err := dumpBody(body)
+	if err != nil {
+		return fmt.Errorf("portal: %s", reason)
+	}
+
+	return fmt.Errorf("portal: %s (response saved to %s — attach when reporting a bug)", reason, path)
+}
+
+func dumpBody(body []byte) (string, error) {
+	// os.CreateTemp already creates with 0600.
+	f, err := os.CreateTemp("", "fortinet_error_*.html")
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	if _, err := f.Write(body); err != nil {
+		return "", err
+	}
+
+	return f.Name(), nil
 }
 
 func (p *Portal) magicToken() (string, string, bool) {

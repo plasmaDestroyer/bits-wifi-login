@@ -6,6 +6,7 @@ var redirectRe = regexp.MustCompile(`fgtauth\?([a-f0-9]+)`)
 var bodyRe = regexp.MustCompile(`(?:magic=|fgtauth\?)([a-f0-9]+)`)
 var formRe = regexp.MustCompile(`name="magic"[[:space:]]+value="?([a-f0-9]+)`)
 var keepaliveRe = regexp.MustCompile(`keepalive\?([a-f0-9]+)`)
+var rejectRe = regexp.MustCompile(`(?i)invalid.{0,30}(credential|password|user)|wrong.{0,20}(password|user)|authentication.{0,20}fail|please.{0,10}try.{0,10}again|login.{0,10}fail`)
 
 func magicFromRedirect(redirectURL string) (string, bool) {
 	return firstSubmatch(redirectRe, redirectURL)

@@ -3,6 +3,9 @@ package portal
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/plasmaDestroyer/bits-wifi-login/internal/creds"
@@ -25,12 +28,12 @@ func TestLogin(t *testing.T) {
 			name: "creds rejected",
 			handler: func(w http.ResponseWriter, r *http.Request) {
 				switch {
-					case r.Method == http.MethodGet && r.URL.Path == "/": // probe
+				case r.Method == http.MethodGet && r.URL.Path == "/": // probe
 					w.Header().Set("Location", "/fgtauth?deadbeef12345678")
 					w.WriteHeader(http.StatusFound)
-					case r.URL.Path == "/fgtauth": // session init
+				case r.URL.Path == "/fgtauth": // session init
 					w.WriteHeader(http.StatusOK)
-					case r.Method == http.MethodPost && r.URL.Path == "/": // creds rejected: no keepalive
+				case r.Method == http.MethodPost && r.URL.Path == "/": // creds rejected: no keepalive
 					w.Write([]byte("authentication failed"))
 				}
 			},
@@ -50,7 +53,7 @@ func TestLogin(t *testing.T) {
 
 			p := Portal{
 				noFollow:        client,
-				follow: 		 &http.Client{},
+				follow:          &http.Client{},
 				connectivityURL: srv.URL,
 				baseURL:         srv.URL,
 			}
@@ -64,33 +67,77 @@ func TestLogin(t *testing.T) {
 }
 
 func TestLoginSuccess(t *testing.T) {
-    var keepaliveHit bool
-    srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        switch {
-        case r.Method == http.MethodGet && r.URL.Path == "/":
-            w.Header().Set("Location", "/fgtauth?deadbeef12345678")
-            w.WriteHeader(http.StatusFound)
-        case r.URL.Path == "/fgtauth":
-            w.WriteHeader(http.StatusOK)
-        case r.Method == http.MethodPost && r.URL.Path == "/":
-            w.Write([]byte(`window.location="/keepalive?cafebabe87654321"`))
-        case r.URL.Path == "/keepalive":
-            keepaliveHit = true
-            w.WriteHeader(http.StatusOK)
-        }
-    }))
-    defer srv.Close()
+	var keepaliveHit bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/":
+			w.Header().Set("Location", "/fgtauth?deadbeef12345678")
+			w.WriteHeader(http.StatusFound)
+		case r.URL.Path == "/fgtauth":
+			w.WriteHeader(http.StatusOK)
+		case r.Method == http.MethodPost && r.URL.Path == "/":
+			w.Write([]byte(`window.location="/keepalive?cafebabe87654321"`))
+		case r.URL.Path == "/keepalive":
+			keepaliveHit = true
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	defer srv.Close()
 
-    noFollow := srv.Client()
-    noFollow.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-    p := Portal{noFollow: noFollow, follow: &http.Client{}, connectivityURL: srv.URL, baseURL: srv.URL}
+	noFollow := srv.Client()
+	noFollow.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	p := Portal{noFollow: noFollow, follow: &http.Client{}, connectivityURL: srv.URL, baseURL: srv.URL}
 
-    if err := p.Login(creds.Creds{Username: "u", Password: "p"}); err != nil {
-        t.Fatalf("Login() = %v, want nil", err)
-    }
-    if !keepaliveHit {
-        t.Error("keepalive endpoint never hit — session not activated")
-    }
+	if err := p.Login(creds.Creds{Username: "u", Password: "p"}); err != nil {
+		t.Fatalf("Login() = %v, want nil", err)
+	}
+	if !keepaliveHit {
+		t.Error("keepalive endpoint never hit — session not activated")
+	}
+}
+
+func TestRejectionError(t *testing.T) {
+	cases := []struct {
+		name       string
+		body       string
+		wantSubstr string
+	}{
+		{"wrong creds", "<p>Invalid username or password</p>", "wrong username or password"},
+		{"auth failed", "authentication failed", "wrong username or password"},
+		{"unrecognised", "<h1>503 Service Unavailable</h1>", "unexpected portal response (HTTP 503)"},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			err := rejectionError([]byte(c.body), 503)
+			if !strings.Contains(err.Error(), c.wantSubstr) {
+				t.Errorf("rejectionError() = %q, want it to contain %q", err, c.wantSubstr)
+			}
+
+			path := dumpPath(t, err)
+			saved, readErr := os.ReadFile(path)
+			if readErr != nil {
+				t.Fatalf("dump file %s unreadable: %v", path, readErr)
+			}
+			defer os.Remove(path)
+
+			if string(saved) != c.body {
+				t.Errorf("dump file = %q, want %q", saved, c.body)
+			}
+		})
+	}
+}
+
+// dumpPath pulls the "saved to <path>" filename back out of the error message.
+func dumpPath(t *testing.T, err error) string {
+	t.Helper()
+
+	m := regexp.MustCompile(`saved to (\S+)`).FindStringSubmatch(err.Error())
+	if m == nil {
+		t.Fatalf("error names no dump file: %v", err)
+	}
+
+	return m[1]
 }
 
 func TestMagicToken(t *testing.T) {
