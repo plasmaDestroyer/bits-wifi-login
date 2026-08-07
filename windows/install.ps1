@@ -48,15 +48,27 @@ function Write-CredsFile {
     ) | Set-Content -Path $Path -Encoding UTF8
 }
 
+# The binary logs to stdout; a scheduled task discards that, so route it through
+# cmd.exe to keep a log file (Windows has no journalctl equivalent here).
+function Get-TaskCommandLine {
+    param(
+        [string]$BinaryPath,
+        [string]$LogFile
+    )
+
+    return "/c `"`"$BinaryPath`" >> `"$LogFile`" 2>&1`""
+}
+
 function Get-TaskXml {
     param(
         [string]$TaskUser,
-        [string]$LoginScript,
+        [string]$BinaryPath,
+        [string]$LogFile,
         [string]$PeriodicStartBoundary
     )
 
     $escapedTaskUser = ConvertTo-EscapedXmlText $TaskUser
-    $escapedTaskArgs = ConvertTo-EscapedXmlText "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$LoginScript`""
+    $escapedTaskArgs = ConvertTo-EscapedXmlText (Get-TaskCommandLine -BinaryPath $BinaryPath -LogFile $LogFile)
     $escapedStartBoundary = ConvertTo-EscapedXmlText $PeriodicStartBoundary
 
     return @"
@@ -97,7 +109,7 @@ function Get-TaskXml {
   </Settings>
   <Actions Context="Author">
     <Exec>
-      <Command>powershell.exe</Command>
+      <Command>cmd.exe</Command>
       <Arguments>$escapedTaskArgs</Arguments>
     </Exec>
   </Actions>
@@ -108,11 +120,12 @@ function Get-TaskXml {
 function Get-EventTaskXml {
     param(
         [string]$TaskUser,
-        [string]$LoginScript
+        [string]$BinaryPath,
+        [string]$LogFile
     )
 
     $escapedTaskUser = ConvertTo-EscapedXmlText $TaskUser
-    $escapedTaskArgs = ConvertTo-EscapedXmlText "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$LoginScript`""
+    $escapedTaskArgs = ConvertTo-EscapedXmlText (Get-TaskCommandLine -BinaryPath $BinaryPath -LogFile $LogFile)
 
     return @"
 <?xml version="1.0" encoding="UTF-16"?>
@@ -150,7 +163,7 @@ function Get-EventTaskXml {
   </Settings>
   <Actions Context="Author">
     <Exec>
-      <Command>powershell.exe</Command>
+      <Command>cmd.exe</Command>
       <Arguments>$escapedTaskArgs</Arguments>
     </Exec>
   </Actions>
@@ -170,21 +183,17 @@ $TaskUser = $CurrentIdentity.Name
 Write-Host "[INFO] Registering scheduled tasks for user: $TaskUser — if this looks wrong (e.g. an admin account instead of your login), re-run the installer as the correct user." -ForegroundColor Yellow
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoDir = Split-Path -Parent $ScriptDir
-$LoginScript = Join-Path $ScriptDir "fortinet-login.ps1"
+$BinaryPath = Join-Path $RepoDir "bits-wifi-login.exe"
 $CredsFile = Join-Path $RepoDir "creds.conf"
-$LogFile = Join-Path $RepoDir "fortinet-login.log"
+$LogFile = Join-Path $RepoDir "bits-wifi-login.log"
 $MainTaskName = "BITS-WiFi-Login"
 $EventTaskName = "BITS-WiFi-Login-OnConnect"
 
 # ── Preflight checks ──────────────────────────────────────────────────────────
 
-if (-not (Test-Path $LoginScript)) {
-    Log "ERROR: fortinet-login.ps1 not found at $LoginScript"
-    exit 1
-}
-
-if (-not (Get-Command curl.exe -ErrorAction SilentlyContinue)) {
-    Log "ERROR: curl not found. Please update Windows 10 or install curl."
+if (-not (Test-Path $BinaryPath)) {
+    Log "ERROR: bits-wifi-login.exe not found at $BinaryPath"
+    Log "  Download it from the latest release, or build it: go build -o bits-wifi-login.exe ./cmd/bits-wifi-login"
     exit 1
 }
 
@@ -213,8 +222,8 @@ if (-not (Test-Path $CredsFile)) {
 # ── Register scheduled tasks ─────────────────────────────────────────────────
 
 $periodicStartBoundary = (Get-Date).AddMinutes(1).ToString("s")
-$mainTaskXml = Get-TaskXml -TaskUser $TaskUser -LoginScript $LoginScript -PeriodicStartBoundary $periodicStartBoundary
-$eventTaskXml = Get-EventTaskXml -TaskUser $TaskUser -LoginScript $LoginScript
+$mainTaskXml = Get-TaskXml -TaskUser $TaskUser -BinaryPath $BinaryPath -LogFile $LogFile -PeriodicStartBoundary $periodicStartBoundary
+$eventTaskXml = Get-EventTaskXml -TaskUser $TaskUser -BinaryPath $BinaryPath -LogFile $LogFile
 
 $mainTaskXmlPath = Join-Path $env:TEMP "bits-wifi-main.xml"
 $eventTaskXmlPath = Join-Path $env:TEMP "bits-wifi-connect.xml"

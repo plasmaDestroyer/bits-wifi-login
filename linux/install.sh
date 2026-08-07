@@ -3,7 +3,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-SCRIPT_PATH="${SCRIPT_DIR}/fortinet-login.sh"
+SCRIPT_PATH="${SCRIPT_DIR}/bits-wifi-login"
 USERNAME="$(whoami)"
 
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
@@ -30,7 +30,8 @@ trap 'fail_hint "$LINENO"' ERR
 # ── Preflight checks ──────────────────────────────────────────────────────────
 
 if [[ ! -f "$SCRIPT_PATH" ]]; then
-    log "ERROR: fortinet-login.sh not found at $SCRIPT_PATH"
+    log "ERROR: bits-wifi-login binary not found at $SCRIPT_PATH"
+    log "  Download it from the latest release, or build it: go build -o bits-wifi-login ./cmd/bits-wifi-login"
     exit 1
 fi
 
@@ -58,10 +59,10 @@ else
     log "✓ creds.conf already exists, skipping."
 fi
 
-# ── Make script executable ────────────────────────────────────────────────────
+# ── Make binary executable ────────────────────────────────────────────────────
 
 chmod +x "$SCRIPT_PATH"
-log "✓ Script permissions set."
+log "✓ Binary permissions set."
 
 # ── NetworkManager dispatcher ─────────────────────────────────────────────────
 

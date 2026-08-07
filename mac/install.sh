@@ -3,7 +3,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-SCRIPT_PATH="${SCRIPT_DIR}/fortinet-login.sh"
+SCRIPT_PATH="${SCRIPT_DIR}/bits-wifi-login"
 LABEL="ac.bits.wifi-login"
 PLIST="$HOME/Library/LaunchAgents/${LABEL}.plist"
 LAUNCHD_DOMAIN="gui/$(id -u)"
@@ -38,12 +38,8 @@ if [[ "$(id -u)" == "0" ]]; then
 fi
 
 if [[ ! -f "$SCRIPT_PATH" ]]; then
-    log "ERROR: fortinet-login.sh not found at $SCRIPT_PATH"
-    exit 1
-fi
-
-if ! command -v curl &>/dev/null; then
-    log "ERROR: curl not found."
+    log "ERROR: bits-wifi-login binary not found at $SCRIPT_PATH"
+    log "  Download it from the latest release, or build it: go build -o bits-wifi-login ./cmd/bits-wifi-login"
     exit 1
 fi
 
@@ -67,11 +63,13 @@ else
     log "✓ creds.conf already exists, skipping."
 fi
 
-# ── Make script executable ────────────────────────────────────────────────────
+# ── Make binary executable ────────────────────────────────────────────────────
 
 chmod +x "$SCRIPT_PATH"
 [[ -x "$SCRIPT_PATH" ]]
-log "✓ Script permissions set."
+# Downloaded binaries can carry a quarantine flag that Gatekeeper refuses to run.
+xattr -d com.apple.quarantine "$SCRIPT_PATH" 2>/dev/null || true
+log "✓ Binary permissions set."
 
 # ── launchd plist ─────────────────────────────────────────────────────────────
 
@@ -88,7 +86,6 @@ cat >"$PLIST" <<EOF
 
     <key>ProgramArguments</key>
     <array>
-        <string>/bin/bash</string>
         <string>${SCRIPT_PATH}</string>
     </array>
 
