@@ -1,15 +1,17 @@
 // Command bits-wifi-login authenticates against the BITS Pilani Fortinet captive
-// portal. It is meant to be fired by a background trigger (systemd timer, launchd
-// agent, scheduled task) and exits 0 whenever there is nothing to do.
+// portal. With no arguments it is meant to be fired by a background trigger
+// (systemd timer, launchd agent, scheduled task) and exits 0 whenever there is
+// nothing to do. `install` and `uninstall` manage those triggers.
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/plasmaDestroyer/bits-wifi-login/internal/creds"
+	"github.com/plasmaDestroyer/bits-wifi-login/internal/installer"
 	"github.com/plasmaDestroyer/bits-wifi-login/internal/portal"
 	"github.com/plasmaDestroyer/bits-wifi-login/internal/wifi"
 )
@@ -23,6 +25,43 @@ const (
 func main() {
 	log.SetFlags(log.Ltime)
 
+	var command string
+	if len(os.Args) > 1 {
+		command = os.Args[1]
+	}
+
+	switch command {
+	case "":
+		login()
+	case "install":
+		fatal(installer.Install())
+	case "uninstall":
+		fatal(installer.Uninstall())
+	case "-h", "--help", "help":
+		usage(os.Stdout)
+	default:
+		fmt.Fprintf(os.Stderr, "unknown command %q\n\n", command)
+		usage(os.Stderr)
+		os.Exit(2)
+	}
+}
+
+func usage(w *os.File) {
+	fmt.Fprint(w, `bits-wifi-login — auto-login for the BITS Pilani captive portal
+
+  bits-wifi-login              log in now (what the background triggers run)
+  bits-wifi-login install      set up credentials and background triggers
+  bits-wifi-login uninstall    remove the background triggers
+`)
+}
+
+func fatal(err error) {
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func login() {
 	ssid, err := wifi.SSID()
 	if err != nil {
 		log.Fatalf("could not determine the current network: %v", err)
@@ -40,7 +79,7 @@ func main() {
 		return
 	}
 
-	c, err := creds.Load(credsPath())
+	c, err := creds.Load(creds.DefaultPath())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -67,16 +106,4 @@ func main() {
 	}
 
 	log.Fatal("all attempts failed.")
-}
-
-// credsPath resolves creds.conf next to the binary. The installers bake absolute
-// paths into their triggers and drop creds.conf alongside the program; a trigger
-// has no useful working directory to resolve against.
-func credsPath() string {
-	exe, err := os.Executable()
-	if err != nil {
-		return "creds.conf"
-	}
-
-	return filepath.Join(filepath.Dir(exe), "creds.conf")
 }
