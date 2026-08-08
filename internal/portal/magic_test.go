@@ -24,6 +24,10 @@ func TestFixtures(t *testing.T) {
 		{"intercept_fgtauth.html", magicFromBody, "deadbeef12345678", true},
 		{"intercept_magic.html", magicFromBody, "deadbeef12345678", true},
 		{"portal_form.html", magicFromForm, "deadbeef12345678", true},
+		// The real keepalive window also links `logout?<same-token>`, which sits
+		// above the keepalive URL in the page — matching that instead would log
+		// the user straight back out.
+		{"keepalive_real.html", keepaliveFromBody, "0f0e0d0c0b0a0908", true},
 		{"login_success.html", keepaliveFromBody, "cafebabe87654321", true},
 		{"login_failure.html", keepaliveFromBody, "", false},
 	}
@@ -64,7 +68,6 @@ func TestMagicFromRedirect(t *testing.T) {
 		wantOK    bool
 	}{
 		{"redirect url", "https://fw.bits-pilani.ac.in:8090/fgtauth?deadbeef12345678", "deadbeef12345678", true},
-		{"equals separator", "https://fw.bits-pilani.ac.in:8090/fgtauth=deadbeef12345678", "deadbeef12345678", true},
 		{"no token", "https://example.com/", "", false},
 	}
 

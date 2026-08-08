@@ -2,11 +2,13 @@ package portal
 
 import "regexp"
 
-// The separator is `?` in stock FortiGate (`/fgtauth?<magic>` — the magic is a
-// bare query string, not a key=value pair), but this has never been read off the
-// real BITS portal, so accept `=` too rather than fail closed on a guess.
-var redirectRe = regexp.MustCompile(`fgtauth[?=]([a-f0-9]+)`)
-var bodyRe = regexp.MustCompile(`(?:magic=|fgtauth[?=])([a-f0-9]+)`)
+// Separator confirmed `?` against the live portal on 2026-08-08: the magic is a
+// bare query string, not a key=value pair.
+//
+//	https://fw.bits-pilani.ac.in:8090/fgtauth?034ea02187c4c8d7
+//	https://fw.bits-pilani.ac.in:8090/keepalive?0e050d0a05030901
+var redirectRe = regexp.MustCompile(`fgtauth\?([a-f0-9]+)`)
+var bodyRe = regexp.MustCompile(`(?:magic=|fgtauth\?)([a-f0-9]+)`)
 var formRe = regexp.MustCompile(`name="magic"[[:space:]]+value="?([a-f0-9]+)`)
 var keepaliveRe = regexp.MustCompile(`keepalive\?([a-f0-9]+)`)
 var rejectRe = regexp.MustCompile(`(?i)invalid.{0,30}(credential|password|user)|wrong.{0,20}(password|user)|authentication.{0,20}fail|please.{0,10}try.{0,10}again|login.{0,10}fail`)
