@@ -120,14 +120,8 @@ func (p *Portal) magicToken() (string, string, bool) {
 		return token, "redirect", true
 	}
 
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		return "", "", false
-	}
-	if token, ok := magicFromBody(string(body)); ok {
-		return token, "body", true
-	}
-
+	// Fallback for a portal that serves the form inline instead of redirecting:
+	// fetch it directly and scrape the hidden input.
 	res2, err := p.noFollow.Get(p.baseURL)
 	if err != nil {
 		return "", "", false

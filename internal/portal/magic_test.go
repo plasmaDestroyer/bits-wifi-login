@@ -16,13 +16,9 @@ func TestFixtures(t *testing.T) {
 		wantToken string
 		wantOK    bool
 	}{
-		// Captured from the real BITS portal on 2026-08-08 (token replaced). This
-		// is the page a browser actually lands on: the magic is only in the hidden
-		// form input, so magicFromBody finds nothing and the form strategy carries it.
+		// Captured from the real BITS portal on 2026-08-08 (token replaced) — the
+		// page a browser actually lands on.
 		{"portal_form_real.html", magicFromForm, "a1b2c3d4e5f60718", true},
-		{"portal_form_real.html", magicFromBody, "", false},
-		{"intercept_fgtauth.html", magicFromBody, "deadbeef12345678", true},
-		{"intercept_magic.html", magicFromBody, "deadbeef12345678", true},
 		{"portal_form.html", magicFromForm, "deadbeef12345678", true},
 		// The real keepalive window also links `logout?<same-token>`, which sits
 		// above the keepalive URL in the page — matching that instead would log
@@ -74,28 +70,6 @@ func TestMagicFromRedirect(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			got, ok := magicFromRedirect(c.in)
-			if got != c.wantToken || ok != c.wantOK {
-				t.Errorf("magicFromRedirect(%q) = (%q, %v), want (%q, %v)", c.in, got, ok, c.wantToken, c.wantOK)
-			}
-		})
-	}
-}
-
-func TestMagicFromBody(t *testing.T) {
-	cases := []struct {
-		name      string
-		in        string
-		wantToken string
-		wantOK    bool
-	}{
-		{"intercept fgtauth", "url=https://fw.bits-pilani.ac.in:8090/fgtauth?deadbeef12345678", "deadbeef12345678", true},
-		{"intercept magic", "magic=deadbeef12345678", "deadbeef12345678", true},
-		{"no token", "https://example.com/", "", false},
-	}
-
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			got, ok := magicFromBody(c.in)
 			if got != c.wantToken || ok != c.wantOK {
 				t.Errorf("magicFromRedirect(%q) = (%q, %v), want (%q, %v)", c.in, got, ok, c.wantToken, c.wantOK)
 			}
