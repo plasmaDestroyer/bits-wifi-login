@@ -47,7 +47,7 @@ func install(exe string) error {
 		xml  string
 		desc string
 	}{
-		{mainTask, mainTaskXML(user, exe, logFile), "every 2 minutes and on login"},
+		{mainTask, mainTaskXML(user, exe, logFile), "every 5 minutes and on login"},
 		{eventTask, eventTaskXML(user, exe, logFile), "on network connect and on resume"},
 	}
 
@@ -87,7 +87,7 @@ func summary() string {
 	return "  Triggers:\n" +
 		"    - Every WiFi connect (NetworkProfile Event ID 10000)\n" +
 		"    - Every resume from sleep (Power-Troubleshooter Event ID 1)\n" +
-		"    - Every 2 minutes, and on login\n\n" +
+		"    - Every 5 minutes, and on login\n\n" +
 		"  Logs:\n" +
 		"    Get-Content bits-wifi-login.log -Tail 50\n\n" +
 		"  Repair:\n" +
@@ -147,6 +147,9 @@ func principals(user string) string {
   </Principals>`, esc(user))
 }
 
+// 5 minutes rather than Linux's 10: the NetworkProfile event only fires on
+// connect, so like macOS this poll is the only thing that notices the portal
+// session expiring on its own.
 func mainTaskXML(user, exe, logFile string) string {
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
@@ -156,7 +159,7 @@ func mainTaskXML(user, exe, logFile string) string {
       <StartBoundary>%s</StartBoundary>
       <Enabled>true</Enabled>
       <Repetition>
-        <Interval>PT2M</Interval>
+        <Interval>PT5M</Interval>
         <Duration>P9999D</Duration>
       </Repetition>
     </TimeTrigger>

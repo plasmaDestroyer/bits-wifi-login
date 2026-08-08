@@ -96,7 +96,7 @@ func uninstall() error {
 func summary() string {
 	return "  Triggers:\n" +
 		"    - Network changes (WatchPaths on resolv.conf — fires on most Wi-Fi connects)\n" +
-		"    - Every 2 minutes (StartInterval — the reliable safety net)\n" +
+		"    - Every 5 minutes (StartInterval — the reliable safety net)\n" +
 		"    - At login (RunAtLoad)\n\n" +
 		"  Logs:\n" +
 		"    log show --predicate 'process == \"bits-wifi-login\"' --last 1h\n\n" +
@@ -104,6 +104,9 @@ func summary() string {
 		"    Re-run `bits-wifi-login install` if triggers or permissions break.\n"
 }
 
+// 5 minutes rather than Linux's 10: WatchPaths only fires on network changes,
+// and macOS has no equivalent of NM's connectivity-change, so this poll is the
+// only thing that notices the portal session expiring.
 func plist(exe string) string {
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
@@ -124,7 +127,7 @@ func plist(exe string) string {
     </array>
 
     <key>StartInterval</key>
-    <integer>120</integer>
+    <integer>300</integer>
 
     <key>RunAtLoad</key>
     <true/>

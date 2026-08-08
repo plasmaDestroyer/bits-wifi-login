@@ -154,7 +154,7 @@ func summary() string {
 		"    - Every WiFi connect to a BITS network (NetworkManager dispatcher)\n" +
 		"    - The moment NM notices connectivity dropped (connectivity-change)\n" +
 		"    - Every resume from suspend/sleep (systemd resume service)\n" +
-		"    - Every 2 minutes (systemd timer, persistent across sleep)\n\n" +
+		"    - Every 10 minutes (systemd timer, persistent across sleep)\n\n" +
 		"  Logs:\n" +
 		"    journalctl -u bits-wifi-login.service --since today\n" +
 		"    tail ~/.local/state/bits-wifi-login/dispatcher.log\n\n" +
@@ -226,25 +226,27 @@ WantedBy=suspend.target hibernate.target hybrid-sleep.target suspend-then-hibern
 `, username, exe)
 }
 
-// 2 minutes, not 30: this is the worst-case time spent logged out when the
-// session dies with no network event to notice it. A no-op run is one HTTP
-// request against generate_204, so the frequency costs nothing.
+// The portal session expires on a fixed ~4h boundary, so a bare polling timer
+// aliases against it: a tick landing just before expiry no-ops and the next one
+// is a whole interval away. connectivity-change is what actually closes that,
+// which leaves this as a fallback for hosts where NM connectivity checking is
+// off — 10 minutes, not the 30 that produced the long waits.
 const timerUnit = `[Unit]
 Description=BITS WiFi Login periodic check
 
 [Timer]
 OnBootSec=30s
-OnUnitActiveSec=2min
+OnUnitActiveSec=10min
 Persistent=true
 
 [Install]
 WantedBy=timers.target
 `
 
-// NM only emits connectivity-change if its own connectivity checking is on,
-// and several distros ship it disabled. Point it at the same endpoint the
-// login uses so both agree on what "online" means.
+// NM only emits connectivity-change if its own connectivity checking is on, and
+// several distros ship it disabled. interval is NM's own default; the point of
+// writing this is to guarantee the mechanism exists, not to speed it up.
 const connectivityConf = `[connectivity]
 uri=http://connectivitycheck.gstatic.com/generate_204
-interval=60
+interval=300
 `
