@@ -86,6 +86,14 @@ func install(exe string) error {
 
 	fmt.Println("Installing background triggers (sudo may prompt)...")
 
+	// Prime the sudo timestamp before touching /etc. sudoWrite pipes file content
+	// on stdin, so sudo must fall back to /dev/tty for the password — without a
+	// terminal it fails, and doing that check here means it fails before the first
+	// write rather than halfway through, leaving a partial install.
+	if err := run("sudo", "-v"); err != nil {
+		return errors.New("installer: sudo could not authenticate — run this straight from a terminal (it cannot prompt for a password through a pipe or an editor console)")
+	}
+
 	if err := sudoWrite(dispatcherPath, dispatcher(exe, u.Username, logPath), "0755"); err != nil {
 		return err
 	}
