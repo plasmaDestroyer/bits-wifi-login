@@ -231,12 +231,18 @@ WantedBy=suspend.target hibernate.target hybrid-sleep.target suspend-then-hibern
 // is a whole interval away. connectivity-change is what actually closes that,
 // which leaves this as a fallback for hosts where NM connectivity checking is
 // off — 10 minutes, not the 30 that produced the long waits.
+// OnCalendar, not OnUnitActiveSec: the latter re-arms only against the last
+// *service* activation, so if the service has not run for a while and the timer
+// is then restarted, every trigger evaluates into the past and the unit parks in
+// `active (elapsed)` with `Trigger: n/a` — dead forever, silently. A wall-clock
+// expression always has a next occurrence. Check with `systemctl list-timers`:
+// a healthy timer shows a NEXT, a broken one shows `-`.
 const timerUnit = `[Unit]
 Description=BITS WiFi Login periodic check
 
 [Timer]
 OnBootSec=30s
-OnUnitActiveSec=10min
+OnCalendar=*:0/10
 Persistent=true
 
 [Install]
