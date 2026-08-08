@@ -128,7 +128,16 @@ func install(exe string) error {
 	if err := run("sudo", "systemctl", "enable", "bits-wifi-login-resume.service"); err != nil {
 		return err
 	}
-	if err := run("sudo", "systemctl", "enable", "--now", "bits-wifi-login.timer"); err != nil {
+	if err := run("sudo", "systemctl", "enable", "bits-wifi-login.timer"); err != nil {
+		return err
+	}
+
+	// restart, not `enable --now`. On a re-install the timer is normally already
+	// active, and `start` is a no-op on an active unit — so it would keep its old
+	// in-memory schedule and any change to the timer file would silently not
+	// apply. Worse, a timer parked in `active (elapsed)` stays parked: only a
+	// restart recomputes the next elapse. This is what makes install a repair.
+	if err := run("sudo", "systemctl", "restart", "bits-wifi-login.timer"); err != nil {
 		return err
 	}
 	fmt.Println("✓ Timer enabled and started.")
