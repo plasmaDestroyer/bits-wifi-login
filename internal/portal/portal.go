@@ -17,6 +17,10 @@ type Portal struct {
 	follow          *http.Client
 	connectivityURL string
 	baseURL         string
+
+	// interceptBody is what the probe answered with, kept so a failed token
+	// extraction can dump the evidence instead of just saying "not found".
+	interceptBody []byte
 }
 
 // New builds a Portal aimed at the real BITS captive portal. Both clients share

@@ -181,12 +181,23 @@ func TestMagicToken(t *testing.T) {
 			wantOk:    true,
 		},
 		{
-			name: "form",
+			// What the real BITS portal does: answers the probe with a page
+			// pointing at /fgtauth?<magic> instead of setting a Location header.
+			name: "intercept body",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				w.Write([]byte(`<meta http-equiv="refresh" content="0; url=https://fw.bits-pilani.ac.in:8090/fgtauth?deadbeef12345678">`))
+			},
+			wantToken: "deadbeef12345678",
+			wantWhich: "body",
+			wantOk:    true,
+		},
+		{
+			name: "form served inline in the probe body",
 			handler: func(w http.ResponseWriter, r *http.Request) {
 				w.Write([]byte(`<input type="hidden" name="magic" value="deadbeef12345678">`))
 			},
 			wantToken: "deadbeef12345678",
-			wantWhich: "form",
+			wantWhich: "body-form",
 			wantOk:    true,
 		},
 		{

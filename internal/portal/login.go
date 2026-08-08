@@ -16,7 +16,7 @@ func (p *Portal) Login(c creds.Creds) error {
 	magic, which, ok := p.magicToken()
 
 	if !ok {
-		return errors.New("portal: no magic token found")
+		return noMagicError(p.interceptBody)
 	}
 
 	// Which strategy fired is the evidence for pruning the other two — log it
@@ -94,6 +94,22 @@ func redact(body []byte, password string) []byte {
 	return bytes.ReplaceAll(body, []byte(password), []byte("[REDACTED]"))
 }
 
+// noMagicError saves whatever the portal actually answered the probe with. Two
+// wrong guesses about that response have already cost a day of failed logins;
+// the next failure should hand over evidence, not a shrug.
+func noMagicError(interceptBody []byte) error {
+	if len(interceptBody) == 0 {
+		return errors.New("portal: no magic token found (the probe returned an empty body — captive portal not detected)")
+	}
+
+	path, err := dumpBody(interceptBody)
+	if err != nil {
+		return errors.New("portal: no magic token found")
+	}
+
+	return fmt.Errorf("portal: no magic token found — the probe response was saved to %s, attach it when reporting this", path)
+}
+
 func dumpBody(body []byte) (string, error) {
 	// os.CreateTemp already creates with 0600.
 	f, err := os.CreateTemp("", "fortinet_error_*.html")
@@ -120,8 +136,25 @@ func (p *Portal) magicToken() (string, string, bool) {
 		return token, "redirect", true
 	}
 
-	// Fallback for a portal that serves the form inline instead of redirecting:
-	// fetch it directly and scrape the hidden input.
+	// The intercept page itself, which is what the BITS portal actually serves:
+	// it answers the probe with a body pointing at /fgtauth?<magic> rather than a
+	// Location header. Confirmed 2026-08-08 — a build that only looked at the
+	// header and at GET / failed every single attempt for a whole day.
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return "", "", false
+	}
+	p.interceptBody = body
+
+	if token, ok := magicFromRedirect(string(body)); ok {
+		return token, "body", true
+	}
+	if token, ok := magicFromForm(string(body)); ok {
+		return token, "body-form", true
+	}
+
+	// Last resort. GET / returns an empty reply on the real portal, so this only
+	// helps if the portal changes; it is kept as the "something moved" net.
 	res2, err := p.noFollow.Get(p.baseURL)
 	if err != nil {
 		return "", "", false
