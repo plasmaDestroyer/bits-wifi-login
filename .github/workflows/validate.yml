@@ -6,8 +6,42 @@ on:
   pull_request:
 
 jobs:
-  shell:
-    name: Shell (bash-n / shellcheck / shfmt / tests)
+  go:
+    name: Go (vet / test / build) on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        # macOS is compile-and-unit validation only — the launchd/networksetup path
+        # has never been exercised on real hardware.
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Format check (gofmt)
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build
+        run: go build ./...
+
+      - name: Cross-compile (windows/amd64)
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          GOOS: windows
+          GOARCH: amd64
+        run: go build ./...
+
+  bootstrap:
+    name: Bootstrap scripts (shellcheck / shfmt / PSScriptAnalyzer)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,63 +50,33 @@ jobs:
         run: sudo apt-get install -y shfmt
 
       - name: Syntax check (bash -n)
-        run: |
-          bash -n fortinet-login.sh
-          bash -n linux/install.sh
-          bash -n linux/uninstall.sh
-          bash -n linux/remote-install.sh
-          bash -n mac/install.sh
-          bash -n mac/uninstall.sh
-          bash -n mac/remote-install.sh
+        run: bash -n install.sh
 
       - name: Lint (shellcheck)
-        run: |
-          shellcheck fortinet-login.sh
-          shellcheck linux/install.sh linux/uninstall.sh linux/remote-install.sh
-          shellcheck mac/install.sh mac/uninstall.sh mac/remote-install.sh
+        run: shellcheck install.sh
 
       - name: Format check (shfmt)
-        run: shfmt -d -i 4 fortinet-login.sh linux/ mac/
+        run: shfmt -d -i 4 install.sh
 
-      - name: Token extraction tests
-        run: bash tests/test_token_extraction.sh
-
-  powershell:
-    name: PowerShell (AST / PSScriptAnalyzer)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Syntax check (AST)
+      - name: Syntax check (PowerShell AST)
         shell: pwsh
         run: |
-          $files = @(
-            "windows/install.ps1",
-            "windows/uninstall.ps1",
-            "windows/fortinet-login.ps1",
-            "windows/remote-install.ps1"
-          )
-          $hasErrors = $false
-          foreach ($f in $files) {
-            $errors = $null
-            [System.Management.Automation.Language.Parser]::ParseFile(
-              (Resolve-Path $f), [ref]$null, [ref]$errors
-            )
-            if ($errors.Count -gt 0) {
-              Write-Host "Syntax errors in $f" -ForegroundColor Red
-              $errors | ForEach-Object { Write-Host $_ }
-              $hasErrors = $true
-            }
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path install.ps1), [ref]$null, [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Host $_ }
+            exit 1
           }
-          if ($hasErrors) { exit 1 }
-          Write-Host "All PS files parsed OK." -ForegroundColor Green
+          Write-Host "install.ps1 parsed OK." -ForegroundColor Green
 
       - name: Lint (PSScriptAnalyzer)
         shell: pwsh
         run: |
           Set-PSRepository PSGallery -InstallationPolicy Trusted
           Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
-          $results = Invoke-ScriptAnalyzer -Path windows/ -Recurse -Severity Warning,Error
+          $results = Invoke-ScriptAnalyzer -Path install.ps1 -Severity Warning,Error
           if ($results) {
             $results | Format-Table -AutoSize
             exit 1
