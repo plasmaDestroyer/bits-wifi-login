@@ -10,6 +10,8 @@ import (
 	"os"
 	"time"
 
+	"golang.org/x/term"
+
 	"github.com/plasmaDestroyer/bits-wifi-login/internal/creds"
 	"github.com/plasmaDestroyer/bits-wifi-login/internal/installer"
 	"github.com/plasmaDestroyer/bits-wifi-login/internal/portal"
@@ -67,15 +69,26 @@ func login() {
 		log.Fatalf("could not determine the current network: %v", err)
 	}
 	if !wifi.IsBITS(ssid) {
-		log.Printf("current WiFi is %q; not a BITS network. Skipping.", ssid)
+		if term.IsTerminal(int(os.Stdout.Fd())) {
+			log.Printf("current WiFi is %q; not a BITS network. Skipping.", ssid)
+		}
 		return
 	}
 
 	p := portal.New()
 
-	log.Print("checking connectivity...")
+	// The triggers fire every couple of minutes and almost always find nothing
+	// to do, so the happy path stays silent unless a human is watching —
+	// otherwise the interesting lines drown in journald.
+	interactive := term.IsTerminal(int(os.Stdout.Fd()))
+
+	if interactive {
+		log.Print("checking connectivity...")
+	}
 	if p.IsLoggedIn() {
-		log.Print("already authenticated, nothing to do.")
+		if interactive {
+			log.Print("already authenticated, nothing to do.")
+		}
 		return
 	}
 

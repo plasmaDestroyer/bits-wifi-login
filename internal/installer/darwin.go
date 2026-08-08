@@ -96,7 +96,7 @@ func uninstall() error {
 func summary() string {
 	return "  Triggers:\n" +
 		"    - Network changes (WatchPaths on resolv.conf — fires on most Wi-Fi connects)\n" +
-		"    - Every 30 minutes (StartInterval — the reliable safety net)\n" +
+		"    - Every 2 minutes (StartInterval — the reliable safety net)\n" +
 		"    - At login (RunAtLoad)\n\n" +
 		"  Logs:\n" +
 		"    log show --predicate 'process == \"bits-wifi-login\"' --last 1h\n\n" +
@@ -124,7 +124,7 @@ func plist(exe string) string {
     </array>
 
     <key>StartInterval</key>
-    <integer>1800</integer>
+    <integer>120</integer>
 
     <key>RunAtLoad</key>
     <true/>

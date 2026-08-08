@@ -10,14 +10,14 @@ It's a single small Go binary with no runtime dependencies — the installer dow
 ```bash
 curl -fsSL https://plasmaDestroyer.github.io/bits-wifi-login/install.sh | bash
 ```
-*Linux requires NetworkManager, and sets up a dispatcher hook plus a systemd service and timer. macOS gets a launchd agent that triggers on DNS/network changes (fires on most Wi-Fi connects but is not a precise trigger — the 30-minute periodic fallback is the reliable safety net).*
+*Linux requires NetworkManager, and sets up a dispatcher hook plus a systemd service and timer. macOS gets a launchd agent that triggers on DNS/network changes (fires on most Wi-Fi connects but is not a precise trigger — the 2-minute periodic fallback is the reliable safety net).*
 
 ### 🪟 Windows
 Open PowerShell as Administrator and run:
 ```powershell
 irm https://plasmaDestroyer.github.io/bits-wifi-login/install.ps1 | iex
 ```
-*Registers scheduled tasks that trigger on network connect, on resume, on login, and every 30 minutes.*
+*Registers scheduled tasks that trigger on network connect, on resume, on login, and every 2 minutes.*
 
 After installation, it will prompt you for your BITS Wifi username and password to create a `creds.conf` file, and set up all the background triggers for your OS. If you ever change your password or need to fix a typo, you can just edit that file directly.
 

@@ -47,7 +47,7 @@ func install(exe string) error {
 		xml  string
 		desc string
 	}{
-		{mainTask, mainTaskXML(user, exe, logFile), "every 30 minutes and on login"},
+		{mainTask, mainTaskXML(user, exe, logFile), "every 2 minutes and on login"},
 		{eventTask, eventTaskXML(user, exe, logFile), "on network connect and on resume"},
 	}
 
@@ -87,7 +87,7 @@ func summary() string {
 	return "  Triggers:\n" +
 		"    - Every WiFi connect (NetworkProfile Event ID 10000)\n" +
 		"    - Every resume from sleep (Power-Troubleshooter Event ID 1)\n" +
-		"    - Every 30 minutes, and on login\n\n" +
+		"    - Every 2 minutes, and on login\n\n" +
 		"  Logs:\n" +
 		"    Get-Content bits-wifi-login.log -Tail 50\n\n" +
 		"  Repair:\n" +
@@ -156,7 +156,7 @@ func mainTaskXML(user, exe, logFile string) string {
       <StartBoundary>%s</StartBoundary>
       <Enabled>true</Enabled>
       <Repetition>
-        <Interval>PT30M</Interval>
+        <Interval>PT2M</Interval>
         <Duration>P9999D</Duration>
       </Repetition>
     </TimeTrigger>

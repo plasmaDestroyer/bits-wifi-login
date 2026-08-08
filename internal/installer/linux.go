@@ -31,10 +31,11 @@ func sudoWrite(path, content, mode string) error {
 }
 
 const (
-	dispatcherPath = "/etc/NetworkManager/dispatcher.d/90-fortinet-login"
-	servicePath    = "/etc/systemd/system/bits-wifi-login.service"
-	timerPath      = "/etc/systemd/system/bits-wifi-login.timer"
-	resumePath     = "/etc/systemd/system/bits-wifi-login-resume.service"
+	dispatcherPath   = "/etc/NetworkManager/dispatcher.d/90-fortinet-login"
+	connectivityPath = "/etc/NetworkManager/conf.d/99-bits-wifi-login-connectivity.conf"
+	servicePath      = "/etc/systemd/system/bits-wifi-login.service"
+	timerPath        = "/etc/systemd/system/bits-wifi-login.timer"
+	resumePath       = "/etc/systemd/system/bits-wifi-login-resume.service"
 )
 
 var units = []string{
@@ -90,6 +91,14 @@ func install(exe string) error {
 	}
 	fmt.Println("✓ NetworkManager dispatcher installed.")
 
+	if err := sudoWrite(connectivityPath, connectivityConf, "0644"); err != nil {
+		return err
+	}
+	if err := run("sudo", "systemctl", "reload", "NetworkManager"); err != nil {
+		fmt.Println("⚠ Could not reload NetworkManager — connectivity checking starts at next restart.")
+	}
+	fmt.Println("✓ NetworkManager connectivity checking enabled.")
+
 	if err := sudoWrite(resumePath, resumeUnit(exe, u.Username), "0644"); err != nil {
 		return err
 	}
@@ -130,7 +139,7 @@ func uninstall() error {
 		}
 	}
 
-	for _, path := range []string{timerPath, servicePath, resumePath, dispatcherPath} {
+	for _, path := range []string{timerPath, servicePath, resumePath, dispatcherPath, connectivityPath} {
 		if err := run("sudo", "rm", "-f", path); err != nil {
 			return err
 		}
@@ -143,8 +152,9 @@ func uninstall() error {
 func summary() string {
 	return "  Triggers:\n" +
 		"    - Every WiFi connect to a BITS network (NetworkManager dispatcher)\n" +
+		"    - The moment NM notices connectivity dropped (connectivity-change)\n" +
 		"    - Every resume from suspend/sleep (systemd resume service)\n" +
-		"    - Every 30 minutes (systemd timer, persistent across sleep)\n\n" +
+		"    - Every 2 minutes (systemd timer, persistent across sleep)\n\n" +
 		"  Logs:\n" +
 		"    journalctl -u bits-wifi-login.service --since today\n" +
 		"    tail ~/.local/state/bits-wifi-login/dispatcher.log\n\n" +
@@ -154,10 +164,14 @@ func summary() string {
 
 // The dispatcher waits for the network to actually answer before logging in —
 // NM reports "up" well before the captive portal is reachable.
+//
+// `connectivity-change` is what closes the silent-drop gap: NM's own periodic
+// connectivity probe flips to "portal" the moment the session dies, and that
+// fires here immediately instead of waiting for the next timer tick.
 func dispatcher(exe, username, logPath string) string {
 	return fmt.Sprintf(`#!/usr/bin/env bash
 CURRENT_SSID=$(nmcli -t -f active,ssid dev wifi 2>/dev/null | grep '^yes' | cut -d: -f2)
-if [[ "$2" == "up" ]] && [[ "$CURRENT_SSID" =~ ^BITS-(STUDENT|STAFF)$ ]]; then
+if [[ "$2" == "up" || "$2" == "connectivity-change" ]] && [[ "$CURRENT_SSID" =~ ^BITS-(STUDENT|STAFF)$ ]]; then
     tries=0
     until curl -s --max-time 3 -o /dev/null -w "%%{http_code}" \
         "http://connectivitycheck.gstatic.com/generate_204" | grep -q "204\|302"; do
@@ -212,14 +226,25 @@ WantedBy=suspend.target hibernate.target hybrid-sleep.target suspend-then-hibern
 `, username, exe)
 }
 
+// 2 minutes, not 30: this is the worst-case time spent logged out when the
+// session dies with no network event to notice it. A no-op run is one HTTP
+// request against generate_204, so the frequency costs nothing.
 const timerUnit = `[Unit]
 Description=BITS WiFi Login periodic check
 
 [Timer]
 OnBootSec=30s
-OnUnitActiveSec=30min
+OnUnitActiveSec=2min
 Persistent=true
 
 [Install]
 WantedBy=timers.target
+`
+
+// NM only emits connectivity-change if its own connectivity checking is on,
+// and several distros ship it disabled. Point it at the same endpoint the
+// login uses so both agree on what "online" means.
+const connectivityConf = `[connectivity]
+uri=http://connectivitycheck.gstatic.com/generate_204
+interval=60
 `
