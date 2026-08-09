@@ -3,22 +3,12 @@
 package installer
 
 import (
-	"encoding/xml"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 )
-
-// The plist is XML, so a path containing & or < would produce a file plutil
-// rejects. Escape rather than forbid — macOS paths legitimately contain spaces.
-func esc(s string) string {
-	var b strings.Builder
-	xml.EscapeText(&b, []byte(s))
-
-	return b.String()
-}
 
 const label = "ac.bits.wifi-login"
 
@@ -133,5 +123,5 @@ func plist(exe string) string {
     <true/>
 </dict>
 </plist>
-`, label, esc(exe))
+`, label, xmlEscape(exe))
 }
