@@ -224,12 +224,6 @@ func watch(p *portal.Portal) {
 			continue
 		}
 
-		// How far the portal's clock ran from ours. This is the only calibration
-		// data there is for the watch window, since the portal reports nothing
-		// about a live session.
-		log.Printf("session dropped %s after the predicted deadline, logging in",
-			time.Since(deadline).Round(time.Second))
-
 		authenticate(p, "")
 
 		return
@@ -248,6 +242,17 @@ func authenticate(p *portal.Portal, ssid string) {
 		log.Printf("not logged in. Authenticating to %s...", ssid)
 	}
 
+	// How far the portal's clock ran from ours. The only calibration data there
+	// is, since the portal reports nothing about a live session. Logged here
+	// rather than in watch() so it is captured on the reactive path too — the
+	// path that runs precisely when the watcher failed to arm, which is the case
+	// most worth measuring.
+	if prev := session.Load(session.DefaultPath()); !prev.LoginAt.IsZero() {
+		log.Printf("expiry noticed %s after the predicted deadline of %s",
+			time.Since(prev.Deadline()).Round(time.Second),
+			prev.Deadline().Format(time.TimeOnly))
+	}
+
 	for attempt := 1; attempt <= attempts; attempt++ {
 		log.Printf("attempt %d/%d...", attempt, attempts)
 
@@ -255,12 +260,12 @@ func authenticate(p *portal.Portal, ssid string) {
 		if err != nil {
 			log.Print(err)
 		} else if settled(p) {
-			log.Print("login successful.")
+			saved := session.Session{LoginAt: s.LoginAt, Timeout: s.Timeout}
 
-			if err := session.Save(session.DefaultPath(), session.Session{
-				LoginAt: s.LoginAt,
-				Timeout: s.Timeout,
-			}); err != nil {
+			log.Printf("login successful. Next expiry due %s",
+				saved.Deadline().Format(time.DateTime))
+
+			if err := session.Save(session.DefaultPath(), saved); err != nil {
 				log.Printf("could not record the session deadline: %v", err)
 			}
 

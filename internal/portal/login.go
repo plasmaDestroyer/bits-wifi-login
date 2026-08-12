@@ -82,10 +82,16 @@ func (p *Portal) Login(c creds.Creds) (Session, error) {
 	// The keepalive page carries the timeout. A failure to read or parse it is not
 	// a failed login — we are authenticated by this point — so fall back to the
 	// default rather than throwing away a working session over a missing number.
-	if keepalive, err := io.ReadAll(res.Body); err == nil {
-		if timeout, ok := timeoutFromBody(string(keepalive)); ok {
-			session.Timeout = timeout
-		}
+	//
+	// Logged either way, and deliberately: the live portal is configured for
+	// 14400s, which is exactly DefaultTimeout, so a silently failed parse would
+	// produce an identical value and be invisible in the state file.
+	keepalive, err := io.ReadAll(res.Body)
+	if timeout, ok := timeoutFromBody(string(keepalive)); err == nil && ok {
+		session.Timeout = timeout
+		log.Printf("portal reports a %s session timeout", timeout)
+	} else {
+		log.Printf("portal reported no session timeout, assuming %s", DefaultTimeout)
 	}
 
 	return session, nil
