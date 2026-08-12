@@ -249,6 +249,10 @@ fi
 `, exe, logPath, username)
 }
 
+// TimeoutStartSec=0 because a run that lands near the portal's expiry camps on it
+// and polls, which takes minutes. Type=oneshot otherwise inherits the default
+// (commonly 90s) and systemd SIGTERMs the watcher mid-window — the feature would
+// look installed and simply never fire.
 func serviceUnit(exe, username string) string {
 	return fmt.Sprintf(`[Unit]
 Description=BITS WiFi Fortinet Login
@@ -259,6 +263,7 @@ Wants=network-online.target
 Type=oneshot
 User=%s
 ExecStart=%s
+TimeoutStartSec=0
 
 [Install]
 WantedBy=multi-user.target

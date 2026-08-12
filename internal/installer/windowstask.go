@@ -75,6 +75,10 @@ func action(exe string) string {
   </Actions>`, xmlEscape(exe))
 }
 
+// ExecutionTimeLimit has to outlast a watch: a run landing near the portal's
+// expiry camps on it and polls for up to WatchWindow+WatchGrace. At the old PT2M
+// the task registered fine and the watcher was killed a couple of minutes in,
+// which is invisible except as an expiry that nothing anticipated.
 const taskSettings = `  <Settings>
     <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
     <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
@@ -82,7 +86,7 @@ const taskSettings = `  <Settings>
     <AllowHardTerminate>true</AllowHardTerminate>
     <StartWhenAvailable>true</StartWhenAvailable>
     <RunOnlyIfNetworkAvailable>true</RunOnlyIfNetworkAvailable>
-    <ExecutionTimeLimit>PT2M</ExecutionTimeLimit>
+    <ExecutionTimeLimit>PT20M</ExecutionTimeLimit>
     <Enabled>true</Enabled>
     <Hidden>true</Hidden>
   </Settings>`
