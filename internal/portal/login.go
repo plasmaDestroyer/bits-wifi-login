@@ -8,15 +8,28 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"time"
 
 	"github.com/plasmaDestroyer/bits-wifi-login/internal/creds"
 )
 
-func (p *Portal) Login(c creds.Creds) error {
+// Session is what the login learns about how long it will last. No token is
+// kept: the expiry is anticipated by watching the clock, never by asking the
+// portal, which answers nothing about a live session anyway.
+type Session struct {
+	LoginAt time.Time
+	Timeout time.Duration
+}
+
+// DefaultTimeout is the fallback when the keepalive page does not carry a
+// countdown. The live portal is configured for exactly this.
+const DefaultTimeout = 4 * time.Hour
+
+func (p *Portal) Login(c creds.Creds) (Session, error) {
 	magic, which, ok := p.magicToken()
 
 	if !ok {
-		return noMagicError(p.interceptBody)
+		return Session{}, noMagicError(p.interceptBody)
 	}
 
 	// Which strategy fired is the evidence for pruning the other two — log it
@@ -29,7 +42,7 @@ func (p *Portal) Login(c creds.Creds) error {
 
 	res, err := p.follow.Get(authUrl)
 	if err != nil {
-		return fmt.Errorf("portal: fgtauth failed: %w", err)
+		return Session{}, fmt.Errorf("portal: fgtauth failed: %w", err)
 	}
 	defer res.Body.Close()
 
@@ -42,29 +55,40 @@ func (p *Portal) Login(c creds.Creds) error {
 		"4Tredir":  {p.connectivityURL},
 	})
 	if err != nil {
-		return fmt.Errorf("portal: credential POST failed: %w", err)
+		return Session{}, fmt.Errorf("portal: credential POST failed: %w", err)
 	}
 	defer res.Body.Close()
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		return fmt.Errorf("portal: reading login response failed: %w", err)
+		return Session{}, fmt.Errorf("portal: reading login response failed: %w", err)
 	}
 
 	token, ok := keepaliveFromBody(string(body))
 	if !ok {
-		return rejectionError(body, res.StatusCode, c.Password)
+		return Session{}, rejectionError(body, res.StatusCode, c.Password)
 	}
 
 	keepaliveUrl := p.baseURL + "/keepalive?" + token
 
 	res, err = p.follow.Get(keepaliveUrl)
 	if err != nil {
-		return fmt.Errorf("portal: keepalive failed: %w", err)
+		return Session{}, fmt.Errorf("portal: keepalive failed: %w", err)
 	}
 	defer res.Body.Close()
 
-	return nil
+	session := Session{LoginAt: time.Now(), Timeout: DefaultTimeout}
+
+	// The keepalive page carries the timeout. A failure to read or parse it is not
+	// a failed login — we are authenticated by this point — so fall back to the
+	// default rather than throwing away a working session over a missing number.
+	if keepalive, err := io.ReadAll(res.Body); err == nil {
+		if timeout, ok := timeoutFromBody(string(keepalive)); ok {
+			session.Timeout = timeout
+		}
+	}
+
+	return session, nil
 }
 
 // rejectionError distinguishes bad credentials from a portal response we don't

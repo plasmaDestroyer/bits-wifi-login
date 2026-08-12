@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/plasmaDestroyer/bits-wifi-login/internal/creds"
 )
@@ -58,7 +59,7 @@ func TestLogin(t *testing.T) {
 				baseURL:         srv.URL,
 			}
 
-			err := p.Login(creds.Creds{Username: "u", Password: "p"})
+			_, err := p.Login(creds.Creds{Username: "u", Password: "p"})
 			if (err != nil) != c.wantErr {
 				t.Errorf("Login() error = %v, wantErr %v", err, c.wantErr)
 			}
@@ -88,11 +89,51 @@ func TestLoginSuccess(t *testing.T) {
 	noFollow.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	p := Portal{noFollow: noFollow, follow: &http.Client{}, connectivityURL: srv.URL, baseURL: srv.URL}
 
-	if err := p.Login(creds.Creds{Username: "u", Password: "p"}); err != nil {
+	s, err := p.Login(creds.Creds{Username: "u", Password: "p"})
+	if err != nil {
 		t.Fatalf("Login() = %v, want nil", err)
 	}
 	if !keepaliveHit {
 		t.Error("keepalive endpoint never hit — session not activated")
+	}
+	// This keepalive page carries no countdown, so the login must still hand back a
+	// usable deadline rather than a zero one that would disable the watch.
+	if s.Timeout != DefaultTimeout || s.LoginAt.IsZero() {
+		t.Errorf("Login() session = %+v, want the default timeout and a login time", s)
+	}
+}
+
+// The real portal renders its auth-timeout into the keepalive page, and that is
+// the only place the deadline can come from.
+func TestLoginReadsTheTimeoutFromKeepalive(t *testing.T) {
+	keepalive, err := os.ReadFile("testdata/keepalive_real.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/":
+			w.Header().Set("Location", "/fgtauth?deadbeef12345678")
+			w.WriteHeader(http.StatusFound)
+		case r.Method == http.MethodPost && r.URL.Path == "/":
+			w.Write([]byte(`window.location="/keepalive?cafebabe87654321"`))
+		case r.URL.Path == "/keepalive":
+			w.Write(keepalive)
+		}
+	}))
+	defer srv.Close()
+
+	noFollow := srv.Client()
+	noFollow.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	p := Portal{noFollow: noFollow, follow: srv.Client(), connectivityURL: srv.URL, baseURL: srv.URL}
+
+	s, err := p.Login(creds.Creds{Username: "u", Password: "p"})
+	if err != nil {
+		t.Fatalf("Login() = %v, want nil", err)
+	}
+	if want := 14400 * time.Second; s.Timeout != want {
+		t.Errorf("Login() timeout = %v, want %v", s.Timeout, want)
 	}
 }
 
