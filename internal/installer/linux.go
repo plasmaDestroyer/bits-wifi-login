@@ -225,16 +225,24 @@ func summary() string {
 // `connectivity-change` is what closes the silent-drop gap: NM's own periodic
 // connectivity probe flips to "portal" the moment the session dies, and that
 // fires here immediately instead of waiting for the next timer tick.
+//
+// The readiness check is "did anything answer at all", i.e. curl's exit status,
+// NOT the HTTP status. It used to wait for a 204 or a 302, which is exactly
+// backwards: an intercepted probe answers 200 with the fgtauth page in the body
+// (no Location header — see internal/portal), so in the one situation this hook
+// exists for, the loop could never match. It burned its ten tries and exited
+// without logging in, which is the 30-60s of dead network after a session
+// expiry. 204 means already online and 302 was never observed.
 func dispatcher(exe, username, logPath string) string {
 	return fmt.Sprintf(`#!/usr/bin/env bash
 CURRENT_SSID=$(nmcli -t -f active,ssid dev wifi 2>/dev/null | grep '^yes' | cut -d: -f2)
 if [[ "$2" == "up" || "$2" == "connectivity-change" ]] && [[ "$CURRENT_SSID" =~ ^BITS-(STUDENT|STAFF)$ ]]; then
     tries=0
-    until curl -s --max-time 3 -o /dev/null -w "%%{http_code}" \
-        "http://connectivitycheck.gstatic.com/generate_204" | grep -q "204\|302"; do
+    until curl -s --max-time 3 -o /dev/null \
+        "http://connectivitycheck.gstatic.com/generate_204"; do
         tries=$((tries + 1))
         [[ $tries -ge 10 ]] && exit 0
-        sleep 3
+        sleep 2
     done
     su -c "%s >> %s 2>&1" %s
 fi
@@ -307,9 +315,14 @@ WantedBy=timers.target
 `
 
 // NM only emits connectivity-change if its own connectivity checking is on, and
-// several distros ship it disabled. interval is NM's own default; the point of
-// writing this is to guarantee the mechanism exists, not to speed it up.
+// several distros ship it disabled, so this guarantees the mechanism exists.
+//
+// interval is the entire detection budget: nothing notices an expired session
+// until NM's next probe, so at NM's 300s default the session could be dead for
+// five minutes with the machine sitting there. 20s costs one HTTP request to
+// gstatic every 20s — nothing next to a Wi-Fi link that is already idling — and
+// bounds the visible outage at roughly 20s plus the login round trips.
 const connectivityConf = `[connectivity]
 uri=http://connectivitycheck.gstatic.com/generate_204
-interval=300
+interval=20
 `
