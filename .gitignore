@@ -1,3 +1,5 @@
 creds.conf
+session.json
+session.lock
 /bits-wifi-login
 /bits-wifi-login.exe

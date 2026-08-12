@@ -19,13 +19,17 @@ import (
 	"github.com/plasmaDestroyer/bits-wifi-login/internal/installer"
 	"github.com/plasmaDestroyer/bits-wifi-login/internal/portal"
 	"github.com/plasmaDestroyer/bits-wifi-login/internal/runlog"
+	"github.com/plasmaDestroyer/bits-wifi-login/internal/session"
 	"github.com/plasmaDestroyer/bits-wifi-login/internal/wifi"
 )
 
 const (
-	attempts    = 2
-	settleDelay = 2 * time.Second // portal needs a moment before the session is live
-	retryDelay  = 3 * time.Second
+	attempts = 2
+	// The portal needs a moment before the session is live. Polled rather than
+	// slept through, because this delay is paid on every single login.
+	settleTimeout = 3 * time.Second
+	settleStep    = 250 * time.Millisecond
+	retryDelay    = 3 * time.Second
 )
 
 func main() {
@@ -175,27 +179,93 @@ func login() {
 		if verbose {
 			log.Print("already authenticated, nothing to do.")
 		}
+		watch(p)
 		return
 	}
 
+	authenticate(p, ssid)
+}
+
+// watch camps on a session that is about to expire. The portal drops us on a
+// fixed timer, which makes it the one network event that can be seen coming: a
+// trigger landing in the last few minutes before the deadline polls until the
+// drop actually happens, instead of leaving it to NetworkManager to notice on
+// its own schedule.
+//
+// Everything here is best-effort. Missing state, a lock held elsewhere, a
+// deadline that never arrives — all of it just returns, and the ordinary
+// reactive path handles the expiry as it did before.
+func watch(p *portal.Portal) {
+	s := session.Load(session.DefaultPath())
+
+	if !session.ShouldWatch(time.Now(), s) && os.Getenv("BITS_WIFI_WATCH_NOW") != "1" {
+		return
+	}
+
+	release, ok := session.Lock(session.LockPath())
+	if !ok {
+		return
+	}
+	defer release()
+
+	deadline := s.Deadline()
+	giveUp := deadline.Add(session.WatchGrace)
+	if os.Getenv("BITS_WIFI_WATCH_NOW") == "1" {
+		giveUp = time.Now().Add(session.WatchGrace)
+	}
+
+	log.Printf("expiry due %s, watching until %s",
+		deadline.Format(time.TimeOnly), giveUp.Format(time.TimeOnly))
+
+	for time.Now().Before(giveUp) {
+		time.Sleep(session.PollInterval)
+
+		if p.IsLoggedIn() {
+			continue
+		}
+
+		// How far the portal's clock ran from ours. This is the only calibration
+		// data there is for the watch window, since the portal reports nothing
+		// about a live session.
+		log.Printf("session dropped %s after the predicted deadline, logging in",
+			time.Since(deadline).Round(time.Second))
+
+		authenticate(p, "")
+
+		return
+	}
+
+	log.Print("expiry did not arrive within the grace period, leaving it to the periodic check.")
+}
+
+func authenticate(p *portal.Portal, ssid string) {
 	c, err := creds.Load(creds.DefaultPath())
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	log.Printf("not logged in. Authenticating to %s...", ssid)
+	if ssid != "" {
+		log.Printf("not logged in. Authenticating to %s...", ssid)
+	}
 
 	for attempt := 1; attempt <= attempts; attempt++ {
 		log.Printf("attempt %d/%d...", attempt, attempts)
 
-		if err := p.Login(c); err != nil {
+		s, err := p.Login(c)
+		if err != nil {
 			log.Print(err)
-		} else {
-			time.Sleep(settleDelay)
-			if p.IsLoggedIn() {
-				log.Print("login successful.")
-				return
+		} else if settled(p) {
+			log.Print("login successful.")
+
+			if err := session.Save(session.DefaultPath(), session.Session{
+				LoginAt: s.LoginAt,
+				Timeout: s.Timeout,
+			}); err != nil {
+				log.Printf("could not record the session deadline: %v", err)
 			}
+
+			return
+		} else {
 			log.Print("portal accepted the login but there is still no connectivity.")
 		}
 
@@ -205,4 +275,18 @@ func login() {
 	}
 
 	log.Fatal("all attempts failed.")
+}
+
+// settled waits for the session to actually come up, returning the moment it
+// does rather than always paying the worst case.
+func settled(p *portal.Portal) bool {
+	for waited := time.Duration(0); waited < settleTimeout; waited += settleStep {
+		time.Sleep(settleStep)
+
+		if p.IsLoggedIn() {
+			return true
+		}
+	}
+
+	return false
 }
