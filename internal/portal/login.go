@@ -126,13 +126,17 @@ func dumpBody(body []byte) (string, error) {
 }
 
 func (p *Portal) magicToken() (string, string, bool) {
-	res, err := p.noFollow.Get(p.connectivityURL)
-	if err != nil {
-		return "", "", false
+	// IsLoggedIn just made this exact request, so reuse its answer instead of
+	// paying for it twice. Consumed either way: on a retry the previous body is
+	// known-useless, and a stale one would only reproduce the same failure.
+	if !p.fresh {
+		if _, err := p.probe(); err != nil {
+			return "", "", false
+		}
 	}
-	defer res.Body.Close()
+	p.fresh = false
 
-	if token, ok := magicFromRedirect(res.Header.Get("Location")); ok {
+	if token, ok := magicFromRedirect(p.interceptLocation); ok {
 		return token, "redirect", true
 	}
 
@@ -140,16 +144,12 @@ func (p *Portal) magicToken() (string, string, bool) {
 	// it answers the probe with a body pointing at /fgtauth?<magic> rather than a
 	// Location header. Confirmed 2026-08-08 — a build that only looked at the
 	// header and at GET / failed every single attempt for a whole day.
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		return "", "", false
-	}
-	p.interceptBody = body
+	body := string(p.interceptBody)
 
-	if token, ok := magicFromRedirect(string(body)); ok {
+	if token, ok := magicFromRedirect(body); ok {
 		return token, "body", true
 	}
-	if token, ok := magicFromForm(string(body)); ok {
+	if token, ok := magicFromForm(body); ok {
 		return token, "body-form", true
 	}
 
