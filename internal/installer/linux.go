@@ -250,9 +250,11 @@ fi
 }
 
 // TimeoutStartSec=0 because a run that lands near the portal's expiry camps on it
-// and polls, which takes minutes. Type=oneshot otherwise inherits the default
-// (commonly 90s) and systemd SIGTERMs the watcher mid-window — the feature would
-// look installed and simply never fire.
+// and polls, which takes minutes. Type=oneshot already defaults to no start
+// timeout, so this is stated rather than needed — it stops a distro-level
+// DefaultTimeoutStartSec or a later change of Type from silently capping the
+// watcher, which would look like the feature was installed and simply never
+// firing. Windows had the same hazard for real: its task XML capped runs at PT2M.
 func serviceUnit(exe, username string) string {
 	return fmt.Sprintf(`[Unit]
 Description=BITS WiFi Fortinet Login
