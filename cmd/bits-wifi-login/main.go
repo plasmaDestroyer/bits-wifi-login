@@ -29,7 +29,9 @@ const (
 )
 
 func main() {
-	log.SetFlags(log.Ltime)
+	// Date included: the dispatcher log is an append-only file read days later,
+	// and bare clock times there are ambiguous exactly when it matters.
+	log.SetFlags(log.Ldate | log.Ltime)
 
 	var command string
 	if len(os.Args) > 1 {
