@@ -28,7 +28,11 @@ After installation, it will prompt you for your BITS Wifi username and password 
 | 🐧 Linux / 🍎 macOS | `~/.local/share/bits-wifi-login/` |
 | 🪟 Windows | `%LOCALAPPDATA%\bits-wifi-login\` |
 
-The binary, `creds.conf` and — on Windows — `bits-wifi-login.log` all sit together in that one folder. You never have to remember it:
+The binary, `creds.conf` and — on Windows — `bits-wifi-login.log` all sit together in that one folder.
+
+You don't have to remember any of it, because installing puts `bits-wifi-login` on your PATH: on Windows by adding the folder to your user PATH, on Linux and macOS by symlinking it into `~/.local/bin`. **Open a new terminal afterwards** — an existing one is still holding the old environment. (On macOS, `~/.local/bin` isn't on the default PATH; the installer tells you the one line to add if it isn't on yours.)
+
+Then, from anywhere:
 
 ```bash
 bits-wifi-login status
@@ -42,7 +46,7 @@ prints the exact paths, whether each background trigger is still registered, wha
 bits-wifi-login uninstall
 ```
 
-That removes the **background triggers**. The binary, `creds.conf` and the log are ordinary files it leaves alone — delete the folder above when you're done with the tool. `creds.conf` in particular is left on purpose so a reinstall doesn't re-prompt for your password.
+That removes the **background triggers** and the PATH entry. The binary, `creds.conf` and the log are ordinary files it leaves alone — delete the folder above when you're done with the tool. `creds.conf` in particular is left on purpose so a reinstall doesn't re-prompt for your password.
 
 Running `uninstall` a second time is harmless: it says nothing was registered rather than pretending to remove things twice.
 
