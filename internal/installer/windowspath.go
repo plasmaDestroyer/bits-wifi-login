@@ -56,15 +56,18 @@ func link(exe string) (bool, error) {
 
 	announce()
 
-	// Say to close it, not merely to open a new one. A program cannot write into
-	// the environment of the shell that launched it — the child gets a copy at
-	// creation — so this window will keep reporting "not recognized" no matter
-	// what the registry now says, and the obvious next move is to retry here.
-	fmt.Printf("✓ Added %s to your PATH.\n"+
-		"  Close this terminal and open a new one — `bits-wifi-login` will not\n"+
-		"  resolve in this window.\n", dir)
-
 	return true, nil
+}
+
+// pathNote goes under the commands in the install summary, because that is the
+// moment someone is about to type one. Say to close the terminal, not merely to
+// open a new one: a program cannot write into the environment of the shell that
+// launched it — the child gets a copy at creation — so this window will keep
+// answering "not recognized" whatever the registry now says, and the obvious
+// next move from there is to retry in the same window.
+func pathNote() string {
+	return "\n  Note: close this terminal and open a new one before running these —\n" +
+		"  the PATH change cannot reach a shell that is already open.\n"
 }
 
 func unlink(exe string) bool {

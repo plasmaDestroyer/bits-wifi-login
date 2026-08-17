@@ -76,15 +76,21 @@ func Install() error {
 	// run `bits-wifi-login <something>`. None of that is true while the install
 	// directory is somewhere PATH has never heard of. Not fatal, though: a tool
 	// that logs you in perfectly well is not worth failing over a PATH entry.
-	//
-	// link reports success itself: what the user has to do next differs by
-	// platform, and only the platform knows.
-	if _, err := link(exe); err != nil {
+	linked, err := link(exe)
+	if err != nil {
 		fmt.Printf("⚠ Could not add %s to your PATH: %v\n"+
 			"  The tool works regardless — run it by its full path.\n", filepath.Dir(exe), err)
 	}
 
 	fmt.Print("\n✓ Installation complete.\n\n" + summary() + "\n" + where(exe))
+
+	// Only when this run is what put it on PATH. On a repair the user is already
+	// standing in a terminal that works, and telling them to close it is wrong.
+	if linked {
+		fmt.Print(pathNote())
+	}
+
+	fmt.Print("\nAll set — enjoy never having to log in to the BITS portal by hand again.\n")
 
 	return nil
 }

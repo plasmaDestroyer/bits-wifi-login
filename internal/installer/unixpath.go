@@ -58,10 +58,6 @@ func link(exe string) (bool, error) {
 		return false, fmt.Errorf("installer: linking %s: %w", path, err)
 	}
 
-	// No "restart your shell" here, unlike Windows: the directory is already on
-	// PATH in the usual case, so the name resolves in this very shell.
-	fmt.Printf("✓ Linked %s\n", path)
-
 	if !onPath(filepath.Dir(path)) {
 		fmt.Printf("⚠ %s is not on your PATH. Add it to use `bits-wifi-login` by name:\n"+
 			"    export PATH=\"%s:$PATH\"\n", filepath.Dir(path), filepath.Dir(path))
@@ -83,6 +79,12 @@ func unlink(exe string) bool {
 	}
 
 	return os.Remove(path) == nil
+}
+
+// Nothing to note here, unlike Windows: the symlink lands in a directory that
+// is already on PATH, so the name resolves in the very shell that ran install.
+func pathNote() string {
+	return ""
 }
 
 func onPath(dir string) bool {
