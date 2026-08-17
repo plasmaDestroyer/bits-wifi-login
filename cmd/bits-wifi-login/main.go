@@ -41,6 +41,8 @@ func main() {
 		fatal(installer.Install())
 	case "uninstall":
 		fatal(installer.Uninstall())
+	case "status":
+		status()
 	case "-h", "--help", "help":
 		usage(os.Stdout)
 	default:
@@ -56,6 +58,7 @@ func usage(w *os.File) {
   bits-wifi-login              log in now (what the background triggers run)
   bits-wifi-login install      set up credentials and background triggers
   bits-wifi-login uninstall    remove the background triggers
+  bits-wifi-login status       where everything lives and whether it is working
 `)
 }
 
@@ -63,6 +66,68 @@ func fatal(err error) {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+// status answers the questions a background tool cannot answer by running:
+// where it put itself, whether the triggers are still registered, and whether
+// the last one that fired did anything. Without it the only evidence the tool
+// exists is the absence of a captive portal.
+func status() {
+	fmt.Println("bits-wifi-login")
+
+	fmt.Println("\n  Files")
+	for _, path := range installer.Files() {
+		fmt.Printf("    %-12s%s\n", exists(path), path)
+	}
+
+	fmt.Println("\n  Triggers")
+	for _, t := range installer.Triggers() {
+		state := "missing"
+		if t.Registered {
+			state = "registered"
+		}
+		fmt.Printf("    %-12s%s\n", state, t.Name)
+	}
+
+	fmt.Println("\n  Now")
+	fmt.Printf("    %-12s%s\n", "network", network())
+	fmt.Printf("    %-12s%s\n", "portal", authentication())
+
+	if last := runlog.LastLine(); last != "" {
+		fmt.Printf("    %-12s%s\n", "last run", last)
+	}
+
+	fmt.Println()
+}
+
+func exists(path string) string {
+	if _, err := os.Stat(path); err != nil {
+		return "missing"
+	}
+
+	return "present"
+}
+
+func network() string {
+	ssid, err := wifi.SSID()
+	switch {
+	case err != nil:
+		return fmt.Sprintf("could not be read (%v)", err)
+	case ssid == "":
+		return "not associated with any Wi-Fi network"
+	case wifi.IsBITS(ssid):
+		return fmt.Sprintf("%q — a BITS network", ssid)
+	default:
+		return fmt.Sprintf("%q — not a BITS network, so a run would do nothing", ssid)
+	}
+}
+
+func authentication() string {
+	if portal.New().IsLoggedIn() {
+		return "authenticated"
+	}
+
+	return "no connectivity — a run would try to log in"
 }
 
 func login() {

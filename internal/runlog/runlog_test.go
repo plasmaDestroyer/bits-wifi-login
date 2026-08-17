@@ -119,6 +119,13 @@ func TestOpenIsWindowsOnly(t *testing.T) {
 }
 
 func TestPathSitsBesideTheBinary(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		if Path() != "" {
+			t.Errorf("Path() = %q on %s, want \"\" — nothing should write a file here", Path(), runtime.GOOS)
+		}
+		return
+	}
+
 	exe, err := os.Executable()
 	if err != nil {
 		t.Skipf("no executable path on this platform: %v", err)
@@ -126,6 +133,52 @@ func TestPathSitsBesideTheBinary(t *testing.T) {
 
 	if want := filepath.Join(filepath.Dir(exe), Name); Path() != want {
 		t.Errorf("Path() = %q, want %q", Path(), want)
+	}
+}
+
+func TestLastLineReadsTheEnd(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body string
+		want string
+	}{
+		{"empty", "", ""},
+		{"one line", "only run\n", "only run"},
+		{"no trailing newline", "first\nsecond", "second"},
+		{"trailing blank lines", "first\nsecond\n\n\n", "second"},
+		{"crlf", "first\r\nsecond\r\n", "second"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), Name)
+			if err := os.WriteFile(path, []byte(tc.body), 0600); err != nil {
+				t.Fatal(err)
+			}
+
+			if got := lastLineAt(path); got != tc.want {
+				t.Errorf("lastLineAt() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// The tail read starts mid-line on a long log; the scan must not hand back that
+// fragment as if it were the newest entry.
+func TestLastLineIgnoresTheTruncatedFirstLine(t *testing.T) {
+	path := filepath.Join(t.TempDir(), Name)
+
+	body := strings.Repeat("x", 8<<10) + "\nnewest run\n"
+	if err := os.WriteFile(path, []byte(body), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := lastLineAt(path); got != "newest run" {
+		t.Errorf("lastLineAt() = %q, want %q", got, "newest run")
+	}
+}
+
+func TestLastLineOnAMissingLog(t *testing.T) {
+	if got := lastLineAt(filepath.Join(t.TempDir(), Name)); got != "" {
+		t.Errorf("lastLineAt() = %q for a missing log, want \"\"", got)
 	}
 }
 

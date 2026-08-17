@@ -90,6 +90,18 @@ func uninstall() (int, error) {
 	return removed, nil
 }
 
+// The plist on disk and the agent actually loaded are two different things, and
+// only the second one logs anybody in — so report both rather than one.
+func triggers() []Trigger {
+	_, statErr := os.Stat(plistPath())
+	_, loadErr := runOut("launchctl", "print", service())
+
+	return []Trigger{
+		{Name: filepath.Base(plistPath()), Registered: statErr == nil},
+		{Name: "launchd agent " + label, Registered: loadErr == nil},
+	}
+}
+
 func summary() string {
 	return "  Triggers:\n" +
 		"    - Network changes (WatchPaths on resolv.conf — fires on most Wi-Fi connects)\n" +

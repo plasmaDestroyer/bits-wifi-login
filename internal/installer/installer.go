@@ -8,12 +8,45 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"golang.org/x/term"
 
 	"github.com/plasmaDestroyer/bits-wifi-login/internal/creds"
+	"github.com/plasmaDestroyer/bits-wifi-login/internal/runlog"
 )
+
+// Trigger is one background trigger and whether the OS still has it. Asking the
+// OS is the only honest answer: an install can rot without anything telling the
+// user, and "is it still set up?" should not require learning schtasks.
+type Trigger struct {
+	Name       string
+	Registered bool
+}
+
+// Triggers reports the platform's triggers, newest install or not.
+func Triggers() []Trigger {
+	return triggers()
+}
+
+// Files lists what an install puts on disk, in the order a person reading the
+// list would want them: the thing that runs, then the two things it keeps.
+func Files() []string {
+	files := []string{}
+
+	if exe, err := os.Executable(); err == nil {
+		files = append(files, exe)
+	}
+
+	files = append(files, creds.DefaultPath())
+
+	if path := runlog.Path(); path != "" {
+		files = append(files, path)
+	}
+
+	return files
+}
 
 // Install prompts for credentials if needed, then wires up the platform's
 // triggers. It is idempotent — re-running repairs a broken install.
@@ -38,9 +71,27 @@ func Install() error {
 		return err
 	}
 
-	fmt.Print("\n✓ Installation complete.\n\n" + summary())
+	fmt.Print("\n✓ Installation complete.\n\n" + summary() + "\n" + where(exe))
 
 	return nil
+}
+
+// where answers the two questions the install output never used to: what did
+// this put on my machine, and how do I get rid of it.
+func where(exe string) string {
+	b := &strings.Builder{}
+
+	b.WriteString("  Files:\n")
+	for _, path := range Files() {
+		b.WriteString("    " + path + "\n")
+	}
+
+	b.WriteString("\n  Remove:\n" +
+		"    `bits-wifi-login uninstall` takes out the background triggers.\n" +
+		"    The files above are just files — delete " + filepath.Dir(exe) + "\n" +
+		"    when you are done with them.\n")
+
+	return b.String()
 }
 
 // Uninstall removes the triggers. creds.conf is deliberately left behind so a
@@ -58,11 +109,27 @@ func Uninstall() error {
 		return nil
 	}
 
-	fmt.Print("\n✓ Uninstall complete.\n\n" +
-		"  creds.conf was left intact so you do not need to re-enter your\n" +
-		"  credentials if you reinstall. Delete it manually if you are done.\n")
+	fmt.Print("\n✓ Uninstall complete.\n\n" + leftovers())
 
 	return nil
+}
+
+// leftovers names what uninstall deliberately did not touch. Saying "creds.conf
+// was left intact" without saying where it is leaves the user to go looking for
+// a file whose location was never printed anywhere.
+func leftovers() string {
+	b := &strings.Builder{}
+
+	b.WriteString("  Your credentials were left intact so a reinstall does not re-prompt.\n" +
+		"  Delete these yourself when you are done with the tool:\n")
+
+	for _, path := range Files() {
+		if _, err := os.Stat(path); err == nil {
+			b.WriteString("    " + path + "\n")
+		}
+	}
+
+	return b.String()
 }
 
 func ensureCreds(path string) error {
