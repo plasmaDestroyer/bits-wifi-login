@@ -15,10 +15,11 @@ import (
 // clearly enough, and registering a task for the current user often does not
 // need elevation at all — checking would only reject cases that work.
 //
-// The path does get checked: it is embedded in a quoted `cmd.exe /c` string, so
-// a quote inside it would break out of the quoting. Windows filenames cannot
-// contain one, which makes this an assertion rather than a filter — but the
-// cost of being wrong is command execution, so assert it anyway.
+// The path is still checked. It no longer goes through a cmd.exe command line,
+// only into an XML <Command> element, so a quote is merely impossible rather
+// than dangerous — but a newline there would be folded into whitespace and the
+// task would silently run something else. Windows filenames can hold neither,
+// which makes this an assertion rather than a filter; assert it anyway.
 func preflight(exe string) error {
 	if strings.ContainsAny(exe, "\"\n\r") {
 		return fmt.Errorf("installer: refusing to install from %q — the path must not contain quotes or newlines", exe)
@@ -29,35 +30,63 @@ func preflight(exe string) error {
 
 func install(exe string) error {
 	user := os.Getenv("USERDOMAIN") + `\` + os.Getenv("USERNAME")
-	logFile := filepath.Join(filepath.Dir(exe), runlog.Name)
 
 	tasks := []struct {
 		name string
-		xml  string
+		xml  func(logon string) string
 		desc string
 	}{
-		{mainTask, mainTaskXML(user, exe, logFile), "every 5 minutes and on login"},
-		{eventTask, eventTaskXML(user, exe, logFile), "on network connect and on resume"},
+		{mainTask, func(l string) string { return mainTaskXML(user, exe, l) }, "every 5 minutes and on login"},
+		{eventTask, func(l string) string { return eventTaskXML(user, exe, l) }, "on network connect and on resume"},
 	}
 
+	// S4U is what keeps the login invisible, but it needs the "log on as a batch
+	// job" right, which not every account has. Degrading to InteractiveToken is
+	// better than refusing to install — it only costs the window back — so try
+	// the quiet one first and say plainly when we could not have it.
+	logon := logonS4U
+
 	for _, t := range tasks {
-		path := filepath.Join(os.TempDir(), t.name+".xml")
+		out, err := createTask(t.name, t.xml(logon))
+		if err != nil && logon == logonS4U {
+			fmt.Printf("⚠ Windows would not register a background task: %s\n"+
+				"  Falling back to an interactive task — a console window may flash on each run.\n",
+				firstLine(out))
 
-		// schtasks /xml requires a Unicode file, not UTF-8.
-		if err := os.WriteFile(path, utf16LE(t.xml), 0600); err != nil {
-			return fmt.Errorf("installer: writing %s: %w", path, err)
+			logon = logonInteractive
+			out, err = createTask(t.name, t.xml(logon))
 		}
-
-		err := run("schtasks", "/create", "/tn", t.name, "/xml", path, "/f")
-		os.Remove(path)
 		if err != nil {
-			return err
+			return fmt.Errorf("%w\n%s", err, strings.TrimSpace(out))
 		}
 
 		fmt.Printf("✓ Scheduled task %s registered (%s).\n", t.name, t.desc)
 	}
 
 	return nil
+}
+
+func createTask(name, doc string) (string, error) {
+	path := filepath.Join(os.TempDir(), name+".xml")
+
+	// schtasks /xml wants a Unicode file; see utf16LE.
+	if err := os.WriteFile(path, utf16LE(doc), 0600); err != nil {
+		return "", fmt.Errorf("installer: writing %s: %w", path, err)
+	}
+	defer os.Remove(path)
+
+	return runOut("schtasks", "/create", "/tn", name, "/xml", path, "/f")
+}
+
+// firstLine keeps a schtasks complaint to the one line that says something.
+func firstLine(out string) string {
+	for _, line := range strings.Split(out, "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			return line
+		}
+	}
+
+	return "no reason given"
 }
 
 func uninstall() error {
@@ -78,7 +107,7 @@ func summary() string {
 		"    - Every resume from sleep (Power-Troubleshooter Event ID 1)\n" +
 		"    - Every 5 minutes, and on login\n\n" +
 		"  Logs:\n" +
-		"    Get-Content bits-wifi-login.log -Tail 50\n\n" +
+		"    Get-Content \"" + runlog.Path() + "\" -Tail 50\n\n" +
 		"  Repair:\n" +
 		"    Re-run `bits-wifi-login install` if triggers or permissions break.\n"
 }
