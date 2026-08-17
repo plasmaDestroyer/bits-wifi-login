@@ -117,6 +117,17 @@ func uninstall() (int, error) {
 	return removed, nil
 }
 
+func triggers() []Trigger {
+	found := make([]Trigger, 0, 2)
+
+	for _, name := range []string{mainTask, eventTask} {
+		_, err := runOut("schtasks", "/query", "/tn", name)
+		found = append(found, Trigger{Name: name, Registered: err == nil})
+	}
+
+	return found
+}
+
 func summary() string {
 	return "  Triggers:\n" +
 		"    - Every WiFi connect (NetworkProfile Event ID 10000)\n" +

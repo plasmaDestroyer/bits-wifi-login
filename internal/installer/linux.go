@@ -188,6 +188,24 @@ func uninstall() (int, error) {
 	return removed, run("sudo", "systemctl", "daemon-reload")
 }
 
+// is-enabled and a stat, not systemctl status: neither needs root, and status
+// would report "inactive" for a oneshot service that is working perfectly.
+func triggers() []Trigger {
+	found := make([]Trigger, 0, len(units)+2)
+
+	for _, unit := range units {
+		_, err := runOut("systemctl", "is-enabled", unit)
+		found = append(found, Trigger{Name: unit, Registered: err == nil})
+	}
+
+	for _, path := range []string{dispatcherPath, connectivityPath} {
+		_, err := os.Stat(path)
+		found = append(found, Trigger{Name: filepath.Base(path), Registered: err == nil})
+	}
+
+	return found
+}
+
 func summary() string {
 	return "  Triggers:\n" +
 		"    - Every WiFi connect to a BITS network (NetworkManager dispatcher)\n" +

@@ -8,9 +8,11 @@
 package runlog
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 // Name is the log file's name. The Windows task action used to hard-code this
@@ -23,8 +25,14 @@ const Name = "bits-wifi-login.log"
 const maxBytes = 512 << 10
 
 // Path resolves the log beside the running binary, the same way creds.conf is
-// resolved — the triggers that run it have no useful working directory.
+// resolved — the triggers that run it have no useful working directory. It
+// returns "" on the platforms that keep no file, which is what callers should
+// test rather than repeating the GOOS check.
 func Path() string {
+	if runtime.GOOS != "windows" {
+		return ""
+	}
+
 	exe, err := os.Executable()
 	if err != nil {
 		return Name
@@ -38,11 +46,62 @@ func Path() string {
 // every error here is answered with nil rather than an error the caller would
 // only have to ignore.
 func Open() *os.File {
-	if runtime.GOOS != "windows" {
+	path := Path()
+	if path == "" {
 		return nil
 	}
 
-	return openAt(Path())
+	return openAt(path)
+}
+
+// LastLine returns the most recent line in the run log, which is what `status`
+// shows to answer "has this thing run at all?". Empty when there is no log, no
+// file, or nothing in it yet.
+func LastLine() string {
+	path := Path()
+	if path == "" {
+		return ""
+	}
+
+	return lastLineAt(path)
+}
+
+// lastLineAt reads only the end of the file. The log is capped, but a cap of
+// half a megabyte is still no reason to pull all of it into memory to look at
+// one line — and a tail that starts mid-line is harmless, because the scan runs
+// backwards and stops before it gets there.
+func lastLineAt(path string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+
+	info, err := f.Stat()
+	if err != nil {
+		return ""
+	}
+
+	const tail = 4 << 10
+
+	at := info.Size() - tail
+	if at < 0 {
+		at = 0
+	}
+
+	buf := make([]byte, info.Size()-at)
+	if _, err := f.ReadAt(buf, at); err != nil && err != io.EOF {
+		return ""
+	}
+
+	lines := strings.Split(string(buf), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		if line := strings.TrimRight(lines[i], "\r"); strings.TrimSpace(line) != "" {
+			return line
+		}
+	}
+
+	return ""
 }
 
 func openAt(path string) *os.File {
