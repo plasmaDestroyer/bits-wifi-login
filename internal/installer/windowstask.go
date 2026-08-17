@@ -18,6 +18,15 @@ const (
 	eventTask = "BITS-WiFi-Login-OnConnect"
 )
 
+// The two ways a task can carry the user's identity. S4U ("run whether the user
+// is logged on or not") runs outside the desktop session, which is what keeps
+// the login invisible; InteractiveToken needs a session and therefore gets a
+// console window. Only the fallback in install() should ever pick the latter.
+const (
+	logonS4U         = "S4U"
+	logonInteractive = "InteractiveToken"
+)
+
 // The periodic trigger cannot start in the past, so give it a minute of slack.
 func startBoundary() string {
 	return time.Now().Add(time.Minute).Format("2006-01-02T15:04:05")
@@ -44,23 +53,24 @@ func xmlEscape(s string) string {
 	return b.String()
 }
 
-// The binary logs to stdout and a scheduled task discards that, so route it
-// through cmd.exe to keep a log file — Windows has no journald here.
+// Run the binary itself, with no shell in the way.
 //
-// The quoting is the documented `cmd /c "..."` idiom: cmd strips the outermost
-// pair, leaving each path individually quoted. That is what makes a path
-// containing spaces or an & survive, so don't "simplify" the doubled quotes.
-func taskArguments(exe, logFile string) string {
-	return fmt.Sprintf(`/c ""%s" >> "%s" 2>&1"`, exe, logFile)
-}
-
-func action(exe, logFile string) string {
+// This used to be `cmd.exe /c "<exe> >> <log> 2>&1"`, because a scheduled task
+// discards stdout and Windows has no journald to catch it. That wrapper is
+// exactly what flashed a console window on screen every five minutes: cmd.exe
+// always gets a console, and <Hidden> only hides the task from the Task
+// Scheduler list, never the window. The binary keeps its own log now
+// (internal/runlog), so the shell has nothing left to do.
+//
+// <Command> is a path, not a command line, so a path with spaces needs no
+// quoting here — the old doubled-quote idiom was a property of cmd, not of the
+// task schema.
+func action(exe string) string {
 	return fmt.Sprintf(`  <Actions Context="Author">
     <Exec>
-      <Command>cmd.exe</Command>
-      <Arguments>%s</Arguments>
+      <Command>%s</Command>
     </Exec>
-  </Actions>`, xmlEscape(taskArguments(exe, logFile)))
+  </Actions>`, xmlEscape(exe))
 }
 
 const taskSettings = `  <Settings>
@@ -75,20 +85,20 @@ const taskSettings = `  <Settings>
     <Hidden>true</Hidden>
   </Settings>`
 
-func principals(user string) string {
+func principals(user, logon string) string {
 	return fmt.Sprintf(`  <Principals>
     <Principal id="Author">
       <UserId>%s</UserId>
-      <LogonType>InteractiveToken</LogonType>
+      <LogonType>%s</LogonType>
       <RunLevel>LeastPrivilege</RunLevel>
     </Principal>
-  </Principals>`, xmlEscape(user))
+  </Principals>`, xmlEscape(user), logon)
 }
 
 // 5 minutes rather than Linux's 10: the NetworkProfile event only fires on
 // connect, so like macOS this poll is the only thing that notices the portal
 // session expiring on its own.
-func mainTaskXML(user, exe, logFile string) string {
+func mainTaskXML(user, exe, logon string) string {
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo />
@@ -110,10 +120,10 @@ func mainTaskXML(user, exe, logFile string) string {
 %s
 %s
 </Task>
-`, startBoundary(), xmlEscape(user), principals(user), taskSettings, action(exe, logFile))
+`, startBoundary(), xmlEscape(user), principals(user, logon), taskSettings, action(exe))
 }
 
-func eventTaskXML(user, exe, logFile string) string {
+func eventTaskXML(user, exe, logon string) string {
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo />
@@ -133,5 +143,5 @@ func eventTaskXML(user, exe, logFile string) string {
 %s
 %s
 </Task>
-`, principals(user), taskSettings, action(exe, logFile))
+`, principals(user, logon), taskSettings, action(exe))
 }

@@ -37,15 +37,17 @@ func TestUTF16LEHandlesNonASCII(t *testing.T) {
 	}
 }
 
+func taskDocs(logon string) map[string]string {
+	return map[string]string{
+		"main":  mainTaskXML(`DOMAIN\user`, `C:\Apps\bits-wifi-login.exe`, logon),
+		"event": eventTaskXML(`DOMAIN\user`, `C:\Apps\bits-wifi-login.exe`, logon),
+	}
+}
+
 // A malformed task document is rejected by schtasks with an unhelpful error, so
 // prove both documents parse before they ever reach it.
 func TestTaskXMLIsWellFormed(t *testing.T) {
-	docs := map[string]string{
-		"main":  mainTaskXML(`DOMAIN\user`, `C:\Apps\bits-wifi-login.exe`, `C:\Apps\bits-wifi-login.log`),
-		"event": eventTaskXML(`DOMAIN\user`, `C:\Apps\bits-wifi-login.exe`, `C:\Apps\bits-wifi-login.log`),
-	}
-
-	for name, doc := range docs {
+	for name, doc := range taskDocs(logonS4U) {
 		t.Run(name, func(t *testing.T) {
 			dec := xml.NewDecoder(strings.NewReader(doc))
 			// The declaration says UTF-16 but the Go string is UTF-8; the bytes are
@@ -67,7 +69,7 @@ func TestTaskXMLIsWellFormed(t *testing.T) {
 
 // A domain\user containing & or < must not break the document.
 func TestTaskXMLEscapesUser(t *testing.T) {
-	doc := mainTaskXML(`DOM&AIN\a<b`, `C:\x.exe`, `C:\x.log`)
+	doc := mainTaskXML(`DOM&AIN\a<b`, `C:\x.exe`, logonS4U)
 
 	if strings.Contains(doc, `DOM&AIN`) {
 		t.Error("raw & survived into the task XML — the document will not parse")
@@ -89,37 +91,52 @@ func TestTaskXMLEscapesUser(t *testing.T) {
 	}
 }
 
-// The `cmd /c "..."` idiom: cmd strips the outermost quote pair, leaving each
-// path quoted individually. Collapsing the doubled quotes breaks any path with
-// a space in it — which is most Windows paths.
-func TestTaskArgumentsQuoting(t *testing.T) {
-	got := taskArguments(`C:\Program Files\bits-wifi-login.exe`, `C:\Program Files\bits.log`)
+// A shell in the action means a console window on screen every five minutes.
+// Nothing may creep back between the scheduler and the binary.
+func TestActionRunsTheBinaryDirectly(t *testing.T) {
+	got := action(`C:\Program Files\bits-wifi-login.exe`)
 
-	want := `/c ""C:\Program Files\bits-wifi-login.exe" >> "C:\Program Files\bits.log" 2>&1"`
-	if got != want {
-		t.Errorf("taskArguments() =\n  %s\nwant\n  %s", got, want)
+	if !strings.Contains(got, `<Command>C:\Program Files\bits-wifi-login.exe</Command>`) {
+		t.Errorf("action does not run the binary directly:\n%s", got)
 	}
-	if !strings.HasPrefix(got, `/c ""`) {
-		t.Error("lost the doubled opening quote — a path with a space will not run")
+	if strings.Contains(strings.ToLower(got), "cmd.exe") ||
+		strings.Contains(strings.ToLower(got), "powershell") {
+		t.Errorf("a shell is back in the action — the console window returns with it:\n%s", got)
 	}
-	if !strings.HasSuffix(got, `2>&1"`) {
-		t.Error("lost the trailing quote that closes the /c string")
+	if strings.Contains(got, "<Arguments>") {
+		t.Errorf("the binary takes no arguments from the scheduler:\n%s", got)
+	}
+	// <Command> is a path, not a command line: quoting it would look for a
+	// binary whose name literally starts with a quote.
+	if strings.Contains(command(t, got), `"`) {
+		t.Errorf("the command path is quoted:\n%s", got)
 	}
 }
 
-// The action element carries the arguments through XML escaping; >> and & must
-// survive as entities, not raw.
-func TestActionEscapesRedirection(t *testing.T) {
-	got := action(`C:\x.exe`, `C:\x.log`)
+func command(t *testing.T, action string) string {
+	t.Helper()
 
-	if strings.Contains(got, `2>&1<`) || strings.Contains(got, `>> "`) {
-		t.Errorf("redirection was not XML-escaped:\n%s", got)
+	_, rest, ok := strings.Cut(action, "<Command>")
+	if !ok {
+		t.Fatalf("no <Command> element in:\n%s", action)
 	}
-	if !strings.Contains(got, "&gt;&gt;") || !strings.Contains(got, "&amp;") {
-		t.Errorf("expected escaped >> and & in:\n%s", got)
+	cmd, _, ok := strings.Cut(rest, "</Command>")
+	if !ok {
+		t.Fatalf("unterminated <Command> element in:\n%s", action)
 	}
-	if !strings.Contains(got, "<Command>cmd.exe</Command>") {
-		t.Errorf("action does not invoke cmd.exe:\n%s", got)
+
+	return cmd
+}
+
+// S4U is the whole reason the window is gone; a task written with the
+// interactive logon type shows one again.
+func TestTaskXMLCarriesTheLogonType(t *testing.T) {
+	for _, logon := range []string{logonS4U, logonInteractive} {
+		for name, doc := range taskDocs(logon) {
+			if !strings.Contains(doc, "<LogonType>"+logon+"</LogonType>") {
+				t.Errorf("%s task did not carry logon type %s:\n%s", name, logon, doc)
+			}
+		}
 	}
 }
 

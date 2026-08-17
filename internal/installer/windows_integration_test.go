@@ -29,29 +29,35 @@ func TestSchtasksAcceptsGeneratedXML(t *testing.T) {
 
 	user := os.Getenv("USERDOMAIN") + `\` + os.Getenv("USERNAME")
 	exe := filepath.Join(t.TempDir(), "bits-wifi-login.exe")
-	logFile := filepath.Join(t.TempDir(), "bits-wifi-login.log")
 
-	xmlPath := filepath.Join(t.TempDir(), "selftest.xml")
-	if err := os.WriteFile(xmlPath, utf16LE(mainTaskXML(user, exe, logFile)), 0600); err != nil {
-		t.Fatal(err)
-	}
+	// Both logon types, because install() falls back from one to the other and a
+	// fallback nobody has ever exercised is not a fallback. S4U is the one that
+	// matters: if this machine refuses it, every run shows a console window.
+	for _, logon := range []string{logonS4U, logonInteractive} {
+		t.Run(logon, func(t *testing.T) {
+			xmlPath := filepath.Join(t.TempDir(), "selftest.xml")
+			if err := os.WriteFile(xmlPath, utf16LE(mainTaskXML(user, exe, logon)), 0600); err != nil {
+				t.Fatal(err)
+			}
 
-	// Delete first in case a previous failed run left it behind, and again after.
-	exec.Command("schtasks", "/delete", "/tn", testTask, "/f").Run()
-	t.Cleanup(func() {
-		exec.Command("schtasks", "/delete", "/tn", testTask, "/f").Run()
-	})
+			// Delete first in case a previous failed run left it behind, and again after.
+			exec.Command("schtasks", "/delete", "/tn", testTask, "/f").Run()
+			t.Cleanup(func() {
+				exec.Command("schtasks", "/delete", "/tn", testTask, "/f").Run()
+			})
 
-	out, err := exec.Command("schtasks", "/create", "/tn", testTask, "/xml", xmlPath, "/f").CombinedOutput()
-	if err != nil {
-		if strings.Contains(string(out), "Access is denied") {
-			t.Fatalf("schtasks needs an elevated prompt — re-run this from an Administrator terminal.\n%s", out)
-		}
-		t.Fatalf("schtasks rejected the generated XML: %v\n%s", err, out)
-	}
+			out, err := exec.Command("schtasks", "/create", "/tn", testTask, "/xml", xmlPath, "/f").CombinedOutput()
+			if err != nil {
+				if strings.Contains(string(out), "Access is denied") {
+					t.Fatalf("schtasks needs an elevated prompt — re-run this from an Administrator terminal.\n%s", out)
+				}
+				t.Fatalf("schtasks rejected the %s task: %v\n%s", logon, err, out)
+			}
 
-	if out, err := exec.Command("schtasks", "/query", "/tn", testTask).CombinedOutput(); err != nil {
-		t.Fatalf("task did not register despite schtasks reporting success: %v\n%s", err, out)
+			if out, err := exec.Command("schtasks", "/query", "/tn", testTask).CombinedOutput(); err != nil {
+				t.Fatalf("task did not register despite schtasks reporting success: %v\n%s", err, out)
+			}
+		})
 	}
 }
 
@@ -66,7 +72,7 @@ func TestSchtasksRejectsUTF8(t *testing.T) {
 	const testTask = "BITS-WiFi-Login-SelfTest-UTF8"
 
 	user := os.Getenv("USERDOMAIN") + `\` + os.Getenv("USERNAME")
-	doc := mainTaskXML(user, filepath.Join(t.TempDir(), "x.exe"), filepath.Join(t.TempDir(), "x.log"))
+	doc := mainTaskXML(user, filepath.Join(t.TempDir(), "x.exe"), logonS4U)
 
 	xmlPath := filepath.Join(t.TempDir(), "utf8.xml")
 	if err := os.WriteFile(xmlPath, []byte(doc), 0600); err != nil {

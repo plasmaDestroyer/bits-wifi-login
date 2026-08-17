@@ -21,6 +21,18 @@ func run(name string, args ...string) error {
 	return nil
 }
 
+// runOut is run() for callers that must decide what a failure means before the
+// user is told anything — a retry is coming, or the tool's own wording is worse
+// than ours. Nothing reaches the terminal unless the caller prints it.
+func runOut(name string, args ...string) (string, error) {
+	out, err := exec.Command(name, args...).CombinedOutput()
+	if err != nil {
+		return string(out), fmt.Errorf("installer: %s %s: %w", name, strings.Join(args, " "), err)
+	}
+
+	return string(out), nil
+}
+
 func write(path, content string, mode os.FileMode) error {
 	if err := os.WriteFile(path, []byte(content), mode); err != nil {
 		return fmt.Errorf("installer: writing %s: %w", path, err)
