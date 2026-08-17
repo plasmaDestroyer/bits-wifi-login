@@ -46,8 +46,16 @@ func Install() error {
 // Uninstall removes the triggers. creds.conf is deliberately left behind so a
 // reinstall does not re-prompt.
 func Uninstall() error {
-	if err := uninstall(); err != nil {
+	removed, err := uninstall()
+	if err != nil {
 		return err
+	}
+
+	// "✓ Uninstall complete." after removing nothing at all reads as a job well
+	// done, which is how running uninstall twice ends up looking like a bug.
+	if removed == 0 {
+		fmt.Print("\nNothing to remove — the background triggers were not registered.\n")
+		return nil
 	}
 
 	fmt.Print("\n✓ Uninstall complete.\n\n" +

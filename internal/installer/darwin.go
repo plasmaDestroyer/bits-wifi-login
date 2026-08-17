@@ -63,24 +63,31 @@ func install(exe string) error {
 	return nil
 }
 
-func uninstall() error {
-	if err := run("launchctl", "bootout", service()); err != nil {
-		fmt.Println("⚠ Not loaded or already unloaded: launchd agent")
+func uninstall() (int, error) {
+	removed := 0
+
+	// runOut, not run: booting out an agent that was never loaded is the normal
+	// second-uninstall case, and launchctl's "No such process" on stderr only
+	// contradicts the friendlier line below it.
+	if _, err := runOut("launchctl", "bootout", service()); err != nil {
+		fmt.Println("• Not loaded: launchd agent")
 	} else {
+		removed++
 		fmt.Println("✓ Unloaded launchd agent")
 	}
 
 	path := plistPath()
 	if err := os.Remove(path); err != nil {
 		if !os.IsNotExist(err) {
-			return fmt.Errorf("installer: removing %s: %w", path, err)
+			return removed, fmt.Errorf("installer: removing %s: %w", path, err)
 		}
-		fmt.Printf("⚠ Not found: %s\n", path)
+		fmt.Printf("• Not found: %s\n", path)
 	} else {
+		removed++
 		fmt.Printf("✓ Removed %s\n", path)
 	}
 
-	return nil
+	return removed, nil
 }
 
 func summary() string {
