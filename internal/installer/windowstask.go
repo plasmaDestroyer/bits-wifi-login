@@ -32,8 +32,10 @@ func startBoundary() string {
 	return time.Now().Add(time.Minute).Format("2006-01-02T15:04:05")
 }
 
-// utf16LE encodes with a BOM, which is what schtasks expects from /xml — it
-// rejects UTF-8, including UTF-8 with a BOM.
+// utf16LE encodes with a BOM, which is what schtasks /xml documents, what every
+// Windows build accepts, and what the task document's own declaration says it
+// is. Current builds also tolerate UTF-8 — that was measured, not assumed — but
+// tolerance is not a contract, and writing what we declare costs six lines.
 func utf16LE(s string) []byte {
 	encoded := utf16.Encode([]rune(s))
 

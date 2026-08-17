@@ -7,8 +7,8 @@ import (
 	"testing"
 )
 
-// schtasks /xml rejects UTF-8 outright, so the encoding is load-bearing: wrong
-// bytes here mean "the task file is invalid" with no hint as to why.
+// The encoding is load-bearing: the wrong bytes get "the task file is invalid"
+// out of schtasks with no hint as to why.
 func TestUTF16LE(t *testing.T) {
 	got := utf16LE("A<")
 
