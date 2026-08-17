@@ -30,7 +30,9 @@ After installation, it will prompt you for your BITS Wifi username and password 
 
 The binary, `creds.conf` and — on Windows — `bits-wifi-login.log` all sit together in that one folder.
 
-You don't have to remember any of it, because installing puts `bits-wifi-login` on your PATH: on Windows by adding the folder to your user PATH, on Linux and macOS by symlinking it into `~/.local/bin`. **Open a new terminal afterwards** — an existing one is still holding the old environment. (On macOS, `~/.local/bin` isn't on the default PATH; the installer tells you the one line to add if it isn't on yours.)
+You don't have to remember any of it, because installing puts `bits-wifi-login` on your PATH: on Windows by adding the folder to your user PATH, on Linux and macOS by symlinking it into `~/.local/bin`.
+
+On **Windows**, close the terminal you installed from and open a new one before using the name — a program can't change the environment of the shell that launched it, so that window will keep saying "not recognized" however long you wait. Linux and macOS need no such dance; the name works straight away, unless the installer tells you `~/.local/bin` isn't on your PATH (the macOS default), in which case it prints the one line to add.
 
 Then, from anywhere:
 
