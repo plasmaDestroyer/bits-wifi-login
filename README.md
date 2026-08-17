@@ -21,13 +21,30 @@ irm https://plasmaDestroyer.github.io/bits-wifi-login/install.ps1 | iex
 
 After installation, it will prompt you for your BITS Wifi username and password to create a `creds.conf` file, and set up all the background triggers for your OS. If you ever change your password or need to fix a typo, you can just edit that file directly.
 
-To remove the background triggers:
+### 📂 Where it lives
+
+| Platform | Folder |
+|---|---|
+| 🐧 Linux / 🍎 macOS | `~/.local/share/bits-wifi-login/` |
+| 🪟 Windows | `%LOCALAPPDATA%\bits-wifi-login\` |
+
+The binary, `creds.conf` and — on Windows — `bits-wifi-login.log` all sit together in that one folder. You never have to remember it:
+
+```bash
+bits-wifi-login status
+```
+
+prints the exact paths, whether each background trigger is still registered, what network you're on, whether you're authenticated right now, and what the last run did.
+
+### 🗑️ Removing it
 
 ```bash
 bits-wifi-login uninstall
 ```
 
-`creds.conf` is left behind on purpose so a reinstall doesn't re-prompt. Delete it yourself if you're done.
+That removes the **background triggers**. The binary, `creds.conf` and the log are ordinary files it leaves alone — delete the folder above when you're done with the tool. `creds.conf` in particular is left on purpose so a reinstall doesn't re-prompt for your password.
+
+Running `uninstall` a second time is harmless: it says nothing was registered rather than pretending to remove things twice.
 
 > **Note:** Do not move the install directory after setup. The installer bakes absolute paths into the background trigger configs (systemd unit, launchd plist, or scheduled task), so moving the directory will break the auto-login triggers. If you ever need to relocate it, just re-run the install script from the new location and it will repair everything.
 
@@ -44,6 +61,8 @@ To see what's happening, run it in the foreground — it prints each step:
 ```bash
 bits-wifi-login
 ```
+
+On **Windows** every run also appends a line to `bits-wifi-login.log` beside the binary, background runs included, so the log tells you whether the triggers are firing at all. An empty log means nothing ever ran — check `bits-wifi-login status`. (The file is rolled over to `.log.1` once it passes 512 KB, so it can't grow forever.) Linux and macOS log to journald and the unified log instead, which is why there's no file there.
 
 ### Certificate errors
 
