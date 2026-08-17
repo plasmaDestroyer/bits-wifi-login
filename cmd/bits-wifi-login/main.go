@@ -1,7 +1,9 @@
 // Command bits-wifi-login authenticates against the BITS Pilani Fortinet captive
 // portal. With no arguments it is meant to be fired by a background trigger
 // (systemd timer, launchd agent, scheduled task) and exits 0 whenever there is
-// nothing to do. `install` and `uninstall` manage those triggers.
+// nothing to do. `install` and `uninstall` manage those triggers, and `status`
+// reports on them for the times when a silent background tool is
+// indistinguishable from a broken one.
 package main
 
 import (

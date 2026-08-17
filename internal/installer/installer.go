@@ -30,8 +30,9 @@ func Triggers() []Trigger {
 	return triggers()
 }
 
-// Files lists what an install puts on disk, in the order a person reading the
-// list would want them: the thing that runs, then the two things it keeps.
+// Files lists what an install puts on disk: the binary, then whatever it keeps
+// beside itself. Every path here is reported whether or not it exists — callers
+// that only want the real ones say so.
 func Files() []string {
 	files := []string{}
 
