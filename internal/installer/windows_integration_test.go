@@ -61,32 +61,17 @@ func TestSchtasksAcceptsGeneratedXML(t *testing.T) {
 	}
 }
 
-// Proves the UTF-16 encoding specifically, by feeding schtasks the same document
-// as UTF-8 and requiring it to fail. If this ever passes, utf16LE has stopped
-// being necessary and the comment claiming it is should be corrected.
-func TestSchtasksRejectsUTF8(t *testing.T) {
-	if os.Getenv("BITS_WIFI_TEST_SCHTASKS") != "1" {
-		t.Skip("set BITS_WIFI_TEST_SCHTASKS=1 to run the real schtasks round-trip")
-	}
-
-	const testTask = "BITS-WiFi-Login-SelfTest-UTF8"
-
-	user := os.Getenv("USERDOMAIN") + `\` + os.Getenv("USERNAME")
-	doc := mainTaskXML(user, filepath.Join(t.TempDir(), "x.exe"), logonS4U)
-
-	xmlPath := filepath.Join(t.TempDir(), "utf8.xml")
-	if err := os.WriteFile(xmlPath, []byte(doc), 0600); err != nil {
-		t.Fatal(err)
-	}
-
-	t.Cleanup(func() {
-		exec.Command("schtasks", "/delete", "/tn", testTask, "/f").Run()
-	})
-
-	if err := exec.Command("schtasks", "/create", "/tn", testTask, "/xml", xmlPath, "/f").Run(); err == nil {
-		t.Error("schtasks accepted a UTF-8 task file — utf16LE may no longer be needed")
-	}
-}
+// There used to be a TestSchtasksRejectsUTF8 here, asserting that the same
+// document written as UTF-8 was refused — the idea being that if it ever
+// stopped failing, utf16LE had stopped being necessary. It reported exactly
+// that on real hardware: current schtasks accepts UTF-8 quite happily.
+//
+// That does not make UTF-16 wrong, it makes the assertion wrong. UTF-16 is what
+// /xml documents, what every Windows build takes, and what the document's own
+// declaration claims — so the encoding stays and the test that demanded the
+// opposite is gone rather than reversed. Pinning "schtasks tolerates UTF-8 on
+// the machine that happens to be running the suite" would test Microsoft's
+// leniency, not this code.
 
 // SSID detection has to survive a machine with Wi-Fi off or no adapter at all,
 // since the triggers fire regardless of what the network is doing.
