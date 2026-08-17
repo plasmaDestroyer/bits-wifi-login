@@ -88,12 +88,15 @@ func prompt() (creds.Creds, error) {
 	}
 	username = strings.TrimSpace(username)
 
-	fmt.Print("Enter your BITS password: ")
+	// term.ReadPassword echoes nothing at all — not even asterisks, and the
+	// cursor does not move — so say so. Otherwise the prompt is indistinguishable
+	// from a frozen terminal and people retype, paste, or kill the installer.
+	fmt.Print("Enter your BITS password (hidden — nothing appears as you type, press Enter when done): ")
 
 	password, err := term.ReadPassword(int(os.Stdin.Fd()))
 	fmt.Println()
 	if err != nil {
-		return creds.Creds{}, fmt.Errorf("installer: reading password: %w", err)
+		return creds.Creds{}, fmt.Errorf("installer: reading password: %w — run this straight from a terminal, it cannot read a password through a pipe", err)
 	}
 
 	if username == "" || len(password) == 0 {
