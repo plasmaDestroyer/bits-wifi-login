@@ -56,6 +56,14 @@ func link(exe string) (bool, error) {
 
 	announce()
 
+	// Say to close it, not merely to open a new one. A program cannot write into
+	// the environment of the shell that launched it — the child gets a copy at
+	// creation — so this window will keep reporting "not recognized" no matter
+	// what the registry now says, and the obvious next move is to retry here.
+	fmt.Printf("✓ Added %s to your PATH.\n"+
+		"  Close this terminal and open a new one — `bits-wifi-login` will not\n"+
+		"  resolve in this window.\n", dir)
+
 	return true, nil
 }
 
