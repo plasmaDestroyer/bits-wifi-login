@@ -72,6 +72,18 @@ func Install() error {
 		return err
 	}
 
+	// Every instruction this tool prints, and every line of the README, says to
+	// run `bits-wifi-login <something>`. None of that is true while the install
+	// directory is somewhere PATH has never heard of. Not fatal, though: a tool
+	// that logs you in perfectly well is not worth failing over a PATH entry.
+	switch linked, err := link(exe); {
+	case err != nil:
+		fmt.Printf("⚠ Could not add %s to your PATH: %v\n"+
+			"  The tool works regardless — run it by its full path.\n", filepath.Dir(exe), err)
+	case linked:
+		fmt.Printf("✓ Added to your PATH — open a new terminal to use `bits-wifi-login` by name.\n")
+	}
+
 	fmt.Print("\n✓ Installation complete.\n\n" + summary() + "\n" + where(exe))
 
 	return nil
@@ -88,9 +100,9 @@ func where(exe string) string {
 	}
 
 	b.WriteString("\n  Remove:\n" +
-		"    `bits-wifi-login uninstall` takes out the background triggers.\n" +
-		"    The files above are just files — delete " + filepath.Dir(exe) + "\n" +
-		"    when you are done with them.\n")
+		"    `bits-wifi-login uninstall` takes out the background triggers and\n" +
+		"    the PATH entry. The files above are just files — delete\n" +
+		"    " + filepath.Dir(exe) + " when you are done with them.\n")
 
 	return b.String()
 }
@@ -101,6 +113,11 @@ func Uninstall() error {
 	removed, err := uninstall()
 	if err != nil {
 		return err
+	}
+
+	if exe, err := os.Executable(); err == nil && unlink(exe) {
+		removed++
+		fmt.Println("✓ Removed the PATH entry")
 	}
 
 	// "✓ Uninstall complete." after removing nothing at all reads as a job well
