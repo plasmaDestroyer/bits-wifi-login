@@ -145,25 +145,47 @@ func install(exe string) error {
 	return nil
 }
 
-func uninstall() error {
+func uninstall() (int, error) {
+	removed := 0
+
 	// Disable unconditionally so stale symlinks go too; a unit that was never
-	// installed just reports a failure we can ignore.
+	// installed just reports a failure we can ignore. run, not runOut, all the
+	// way down here: sudo may still need a terminal to prompt on, and swallowing
+	// its stderr would swallow the password prompt with it.
 	for _, unit := range units {
 		if err := run("sudo", "systemctl", "disable", "--now", unit); err != nil {
-			fmt.Printf("⚠ Not found or already removed: %s\n", unit)
+			fmt.Printf("• Not found or already removed: %s\n", unit)
 		} else {
+			removed++
 			fmt.Printf("✓ Disabled and stopped %s\n", unit)
 		}
 	}
 
 	for _, path := range []string{timerPath, servicePath, resumePath, dispatcherPath, connectivityPath} {
-		if err := run("sudo", "rm", "-f", path); err != nil {
-			return err
+		// rm -f cannot tell us whether there was anything there, and reporting a
+		// removal that did not happen is how uninstall ends up claiming it cleaned
+		// a machine it never touched. Everything here is world-readable, so the
+		// existence check needs no root of its own.
+		if _, err := os.Stat(path); err != nil {
+			fmt.Printf("• Not found: %s\n", path)
+			continue
 		}
+
+		if err := run("sudo", "rm", "-f", path); err != nil {
+			return removed, err
+		}
+
+		removed++
 		fmt.Printf("✓ Removed %s\n", path)
 	}
 
-	return run("sudo", "systemctl", "daemon-reload")
+	// Nothing was there, so there is nothing to reload — and no reason to make a
+	// second uninstall ask for a root password to do it.
+	if removed == 0 {
+		return 0, nil
+	}
+
+	return removed, run("sudo", "systemctl", "daemon-reload")
 }
 
 func summary() string {

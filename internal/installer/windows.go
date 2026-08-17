@@ -89,16 +89,32 @@ func firstLine(out string) string {
 	return "no reason given"
 }
 
-func uninstall() error {
+// Ask before deleting, rather than deleting and interpreting the complaint.
+// Deleting a task that was never registered makes schtasks print "ERROR: The
+// system cannot find the file specified." straight to stderr — which is not an
+// error worth showing at all, let alone next to our own line saying the same
+// thing in kinder words. Reading that message back would also mean matching
+// English text on a machine that may not be running in English, and would still
+// leave a genuine refusal (access denied, a corrupt task) reported as "not
+// found". A query settles it in the one way that is both quiet and honest.
+func uninstall() (int, error) {
+	removed := 0
+
 	for _, name := range []string{mainTask, eventTask} {
-		if err := run("schtasks", "/delete", "/tn", name, "/f"); err != nil {
-			fmt.Printf("⚠ Not found: scheduled task %s\n", name)
-		} else {
-			fmt.Printf("✓ Removed scheduled task %s\n", name)
+		if _, err := runOut("schtasks", "/query", "/tn", name); err != nil {
+			fmt.Printf("• Not registered: scheduled task %s\n", name)
+			continue
 		}
+
+		if out, err := runOut("schtasks", "/delete", "/tn", name, "/f"); err != nil {
+			return removed, fmt.Errorf("%w\n%s", err, strings.TrimSpace(out))
+		}
+
+		removed++
+		fmt.Printf("✓ Removed scheduled task %s\n", name)
 	}
 
-	return nil
+	return removed, nil
 }
 
 func summary() string {
