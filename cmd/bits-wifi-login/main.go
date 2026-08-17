@@ -6,6 +6,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/plasmaDestroyer/bits-wifi-login/internal/creds"
 	"github.com/plasmaDestroyer/bits-wifi-login/internal/installer"
 	"github.com/plasmaDestroyer/bits-wifi-login/internal/portal"
+	"github.com/plasmaDestroyer/bits-wifi-login/internal/runlog"
 	"github.com/plasmaDestroyer/bits-wifi-login/internal/wifi"
 )
 
@@ -64,12 +66,32 @@ func fatal(err error) {
 }
 
 func login() {
+	// Where the output goes decides how much of it there is, so settle that
+	// before anything can fail and want to report itself.
+	sink := runlog.Open()
+	if sink != nil {
+		defer sink.Close()
+
+		log.SetOutput(io.MultiWriter(os.Stderr, sink))
+		log.SetFlags(log.Ldate | log.Ltime) // a file outlives the day a time-only stamp assumes
+	}
+
+	// The triggers fire every few minutes and almost always find nothing to do,
+	// so the progress chatter is for humans watching a live run only. An outcome
+	// line is different: where there is a log file it is the only evidence the
+	// run happened at all, so every run leaves exactly one.
+	//
+	// stderr, not stdout — that is where the log package writes, so that is the
+	// stream whose reader decides whether anyone is watching.
+	interactive := term.IsTerminal(int(os.Stderr.Fd()))
+	verbose := interactive || sink != nil
+
 	ssid, err := wifi.SSID()
 	if err != nil {
 		log.Fatalf("could not determine the current network: %v", err)
 	}
 	if !wifi.IsBITS(ssid) {
-		if term.IsTerminal(int(os.Stdout.Fd())) {
+		if verbose {
 			log.Printf("current WiFi is %q; not a BITS network. Skipping.", ssid)
 		}
 		return
@@ -77,16 +99,11 @@ func login() {
 
 	p := portal.New()
 
-	// The triggers fire every couple of minutes and almost always find nothing
-	// to do, so the happy path stays silent unless a human is watching —
-	// otherwise the interesting lines drown in journald.
-	interactive := term.IsTerminal(int(os.Stdout.Fd()))
-
 	if interactive {
 		log.Print("checking connectivity...")
 	}
 	if p.IsLoggedIn() {
-		if interactive {
+		if verbose {
 			log.Print("already authenticated, nothing to do.")
 		}
 		return

@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/plasmaDestroyer/bits-wifi-login/internal/runlog"
 )
 
 // ponytail: no upfront elevation check. schtasks reports "Access is denied."
@@ -27,7 +29,7 @@ func preflight(exe string) error {
 
 func install(exe string) error {
 	user := os.Getenv("USERDOMAIN") + `\` + os.Getenv("USERNAME")
-	logFile := filepath.Join(filepath.Dir(exe), "bits-wifi-login.log")
+	logFile := filepath.Join(filepath.Dir(exe), runlog.Name)
 
 	tasks := []struct {
 		name string
