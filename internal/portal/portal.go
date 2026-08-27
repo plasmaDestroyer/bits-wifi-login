@@ -24,6 +24,11 @@ type Portal struct {
 	interceptBody []byte
 	// interceptLocation is the probe's Location header, kept for the same reason.
 	interceptLocation string
+	// interceptStatus is the probe's HTTP status. An empty intercept body says
+	// nothing on its own — a VPN swallowing the probe and a portal that changed
+	// its page look identical without it. CloudflareWARP tunnels the probe past
+	// the Fortinet in QUIC, which is exactly this failure.
+	interceptStatus int
 	// fresh marks a probe result that magicToken has not consumed yet.
 	fresh bool
 }
@@ -69,6 +74,7 @@ func (p *Portal) probe() (int, error) {
 	}
 
 	p.interceptLocation = res.Header.Get("Location")
+	p.interceptStatus = res.StatusCode
 	p.interceptBody = body
 	p.fresh = true
 

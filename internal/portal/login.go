@@ -29,7 +29,7 @@ func (p *Portal) Login(c creds.Creds) (Session, error) {
 	magic, which, ok := p.magicToken()
 
 	if !ok {
-		return Session{}, noMagicError(p.interceptBody)
+		return Session{}, noMagicError(p.interceptBody, p.interceptStatus, p.interceptLocation)
 	}
 
 	// Which strategy fired is the evidence for pruning the other two — log it
@@ -127,9 +127,9 @@ func redact(body []byte, password string) []byte {
 // noMagicError saves whatever the portal actually answered the probe with. Two
 // wrong guesses about that response have already cost a day of failed logins;
 // the next failure should hand over evidence, not a shrug.
-func noMagicError(interceptBody []byte) error {
+func noMagicError(interceptBody []byte, status int, location string) error {
 	if len(interceptBody) == 0 {
-		return errors.New("portal: no magic token found (the probe returned an empty body — captive portal not detected)")
+		return fmt.Errorf("portal: no magic token found — the probe returned HTTP %d with an empty body and Location %q. If a VPN is up (CloudflareWARP, Tailscale) it is tunnelling the probe past the captive portal; exclude %s from it", status, location, connectivityURL)
 	}
 
 	path, err := dumpBody(interceptBody)
@@ -137,7 +137,7 @@ func noMagicError(interceptBody []byte) error {
 		return errors.New("portal: no magic token found")
 	}
 
-	return fmt.Errorf("portal: no magic token found — the probe response was saved to %s, attach it when reporting this", path)
+	return fmt.Errorf("portal: no magic token found (HTTP %d) — the probe response was saved to %s, attach it when reporting this", status, path)
 }
 
 func dumpBody(body []byte) (string, error) {
