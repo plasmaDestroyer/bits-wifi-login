@@ -24,7 +24,11 @@ import (
 )
 
 const (
-	attempts = 2
+	// The portal drops connections mid-flow ("EOF" on the fgtauth GET or the
+	// credential POST) often enough that two tries 3s apart burned out in six
+	// seconds and left the network dead until the next 10-minute tick. Backed
+	// off instead: 3s, 6s, 12s, ~21s of trying.
+	attempts = 4
 	// The portal needs a moment before the session is live. Polled rather than
 	// slept through, because this delay is paid on every single login.
 	settleTimeout = 3 * time.Second
@@ -275,7 +279,7 @@ func authenticate(p *portal.Portal, ssid string) {
 		}
 
 		if attempt < attempts {
-			time.Sleep(retryDelay)
+			time.Sleep(retryDelay << (attempt - 1))
 		}
 	}
 
