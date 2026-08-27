@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Platform code is build-tagged, so vet and test on the host prove nothing about
+# the other two. CI catches this, but not before the push is public.
+set -e
+
+GOOS=windows GOARCH=amd64 go build ./...
+GOOS=darwin GOARCH=arm64 go build ./...

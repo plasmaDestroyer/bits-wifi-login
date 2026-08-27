@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# The background triggers run the binary at a baked absolute path, so a commit
+# that is not rebuilt is a commit that is not actually running. This is the
+# whole reason it is a hook: the gap between "committed" and "live" is invisible.
+#
+# Not `bits-wifi-login install` — that needs sudo and would prompt in the middle
+# of a commit. Re-run it by hand when trigger definitions or paths change.
+go build -o bits-wifi-login ./cmd/bits-wifi-login || {
+    echo "post-commit: rebuild failed — the installed binary is now behind HEAD" >&2
+    exit 0
+}

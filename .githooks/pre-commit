@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# What CI runs, minus the cross-compiles — those are in pre-push, where the
+# extra two seconds are paid once per batch instead of once per commit.
+set -e
+
+unformatted=$(gofmt -l .)
+if [[ -n "$unformatted" ]]; then
+    echo "gofmt would change:" >&2
+    echo "$unformatted" >&2
+    exit 1
+fi
+
+go vet ./...
+go test ./...
