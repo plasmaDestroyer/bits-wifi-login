@@ -190,12 +190,18 @@ func uninstall() (int, error) {
 
 // is-enabled and a stat, not systemctl status: neither needs root, and status
 // would report "inactive" for a oneshot service that is working perfectly.
+//
+// is-enabled exits non-zero for "disabled", which is the *correct* state for
+// bits-wifi-login.service — install only enables the timer and the resume unit,
+// and the timer is what pulls the service in. Judge on the word, not the exit
+// status, or a healthy install reports its own service missing.
 func triggers() []Trigger {
 	found := make([]Trigger, 0, len(units)+2)
 
 	for _, unit := range units {
-		_, err := runOut("systemctl", "is-enabled", unit)
-		found = append(found, Trigger{Name: unit, Registered: err == nil})
+		state, err := runOut("systemctl", "is-enabled", unit)
+		registered := err == nil || strings.TrimSpace(state) == "disabled"
+		found = append(found, Trigger{Name: unit, Registered: registered})
 	}
 
 	for _, path := range []string{dispatcherPath, connectivityPath} {
