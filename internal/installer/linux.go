@@ -209,7 +209,24 @@ func triggers() []Trigger {
 		found = append(found, Trigger{Name: filepath.Base(path), Registered: err == nil})
 	}
 
+	// The connectivity file existing proves nothing — NM can be told at runtime
+	// to stop checking, and then it reads the file, reports its uri back, and
+	// never probes. That is invisible from the filesystem and it is what turned
+	// connectivity-change into a dead trigger for weeks. Ask NM itself.
+	found = append(found, Trigger{
+		Name:       "NM connectivity checking (the connectivity-change trigger)",
+		Registered: connectivityCheckEnabled(),
+	})
+
 	return found
+}
+
+func connectivityCheckEnabled() bool {
+	out, err := runOut("busctl", "get-property",
+		"org.freedesktop.NetworkManager", "/org/freedesktop/NetworkManager",
+		"org.freedesktop.NetworkManager", "ConnectivityCheckEnabled")
+
+	return err == nil && strings.TrimSpace(out) == "b true"
 }
 
 func summary() string {
@@ -330,12 +347,27 @@ WantedBy=timers.target
 // NM only emits connectivity-change if its own connectivity checking is on, and
 // several distros ship it disabled, so this guarantees the mechanism exists.
 //
-// interval is the entire detection budget: nothing notices an expired session
-// until NM's next probe, so at NM's 300s default the session could be dead for
-// five minutes with the machine sitting there. 20s costs one HTTP request to
-// gstatic every 20s — nothing next to a Wi-Fi link that is already idling — and
-// bounds the visible outage at roughly 20s plus the login round trips.
+// enabled=true is not redundant with setting a uri. Confirmed 2026-08-28: NM
+// reported ConnectivityCheckEnabled=false while happily reporting this file's
+// uri and interval, so it had never probed once and connectivity-change had
+// never fired — thirteen hours of a session drop caught only by the 10-minute
+// fallback timer. Something had switched it off at runtime, which NM records in
+// /var/lib/NetworkManager/NetworkManager-intern.conf. That file is read after
+// conf.d and wins, so this key is the floor, not the last word: check the live
+// value with
+//
+//	busctl get-property org.freedesktop.NetworkManager \
+//	    /org/freedesktop/NetworkManager \
+//	    org.freedesktop.NetworkManager ConnectivityCheckEnabled
+//
+// interval is the rest of the detection budget: nothing notices an expired
+// session until NM's next probe, so at NM's 300s default the session could be
+// dead for five minutes with the machine sitting there. 20s costs one HTTP
+// request to gstatic every 20s — nothing next to a Wi-Fi link that is already
+// idling — and bounds the visible outage at roughly 20s plus the login round
+// trips.
 const connectivityConf = `[connectivity]
+enabled=true
 uri=http://connectivitycheck.gstatic.com/generate_204
 interval=20
 `
