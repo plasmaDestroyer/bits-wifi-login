@@ -13,17 +13,17 @@ import (
 	"github.com/plasmaDestroyer/bits-wifi-login/internal/creds"
 )
 
-// Session is what the login learns about how long it will last. No token is
-// kept: the expiry is anticipated by watching the clock, never by asking the
-// portal, which answers nothing about a live session anyway.
+// Session is what the login learns. No token is kept: the expiry is anticipated
+// by watching the clock, never by asking the portal, which answers nothing about
+// a live session anyway.
+//
+// No timeout either. The keepalive page advertises 14400s and that number is not
+// the session lifetime — measured 2026-08-28, a session outlived it by hours —
+// so reading it produced a confidently wrong deadline. How long a session lasts
+// is measured from observed drops instead; see session.Observe.
 type Session struct {
 	LoginAt time.Time
-	Timeout time.Duration
 }
-
-// DefaultTimeout is the fallback when the keepalive page does not carry a
-// countdown. The live portal is configured for exactly this.
-const DefaultTimeout = 4 * time.Hour
 
 func (p *Portal) Login(c creds.Creds) (Session, error) {
 	magic, which, ok := p.magicToken()
@@ -77,24 +77,9 @@ func (p *Portal) Login(c creds.Creds) (Session, error) {
 	}
 	defer res.Body.Close()
 
-	session := Session{LoginAt: time.Now(), Timeout: DefaultTimeout}
-
-	// The keepalive page carries the timeout. A failure to read or parse it is not
-	// a failed login — we are authenticated by this point — so fall back to the
-	// default rather than throwing away a working session over a missing number.
-	//
-	// Logged either way, and deliberately: the live portal is configured for
-	// 14400s, which is exactly DefaultTimeout, so a silently failed parse would
-	// produce an identical value and be invisible in the state file.
-	keepalive, err := io.ReadAll(res.Body)
-	if timeout, ok := timeoutFromBody(string(keepalive)); err == nil && ok {
-		session.Timeout = timeout
-		log.Printf("portal reports a %s session timeout", timeout)
-	} else {
-		log.Printf("portal reported no session timeout, assuming %s", DefaultTimeout)
-	}
-
-	return session, nil
+	// The keepalive GET above is what actually activates the session, so it has to
+	// happen; its body has nothing worth reading.
+	return Session{LoginAt: time.Now()}, nil
 }
 
 // rejectionError distinguishes bad credentials from a portal response we don't

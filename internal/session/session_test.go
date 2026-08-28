@@ -135,3 +135,84 @@ func TestLockIgnoresStale(t *testing.T) {
 		t.Error("Lock() on a stale lock = false, want true")
 	}
 }
+
+// The regression this whole package exists for: the portal advertises 14400s and
+// a session measured on 2026-08-28 outlived that by hours, so a believed number
+// produced a wrong deadline and a watcher that polled through it for nothing.
+// Observe must take its answer from what actually happened.
+func TestObserve(t *testing.T) {
+	base := time.Date(2026, 8, 27, 15, 24, 13, 0, time.UTC)
+	day := 24*time.Hour + 3*time.Minute
+
+	cases := []struct {
+		name string
+		prev Session
+		at   time.Time
+		want time.Duration
+	}{
+		{
+			// Nothing to compare against, so no guess. An unknown deadline
+			// disables the watch, which is correct; a wrong one wastes polling.
+			name: "first ever login measures nothing",
+			prev: Session{},
+			at:   base,
+			want: 0,
+		},
+		{
+			name: "one drop gives the first estimate",
+			prev: Session{LoginAt: base},
+			at:   base.Add(day),
+			want: day,
+		},
+		{
+			// A suspended laptop or a missed drop can only stretch the gap, so a
+			// longer observation is noise and must not replace a tighter one.
+			name: "a longer observation never loosens the estimate",
+			prev: Session{LoginAt: base, Timeout: day},
+			at:   base.Add(3 * day),
+			want: day,
+		},
+		{
+			name: "a shorter plausible observation tightens it",
+			prev: Session{LoginAt: base, Timeout: day},
+			at:   base.Add(5 * time.Hour),
+			want: 5 * time.Hour,
+		},
+		{
+			// Two logins in quick succession are a failed attempt or a flapping
+			// link. Accepting one would pin the estimate near zero for good.
+			name: "an implausibly short observation is rejected",
+			prev: Session{LoginAt: base, Timeout: day},
+			at:   base.Add(4 * time.Minute),
+			want: day,
+		},
+		{
+			name: "and cannot seed the estimate either",
+			prev: Session{LoginAt: base},
+			at:   base.Add(time.Minute),
+			want: 0,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := Observe(c.prev, c.at)
+
+			if got.Timeout != c.want {
+				t.Errorf("Observe() timeout = %v, want %v", got.Timeout, c.want)
+			}
+			if !got.LoginAt.Equal(c.at) {
+				t.Errorf("Observe() LoginAt = %v, want %v", got.LoginAt, c.at)
+			}
+		})
+	}
+}
+
+// A zero timeout must disable the watch rather than arm it at the login instant.
+func TestObserveWithoutAnEstimateDisablesTheWatch(t *testing.T) {
+	at := time.Date(2026, 8, 28, 15, 30, 11, 0, time.UTC)
+
+	if s := Observe(Session{}, at); ShouldWatch(at, s) {
+		t.Errorf("ShouldWatch(%v) = true for an unmeasured session, want false", s)
+	}
+}

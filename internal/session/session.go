@@ -22,6 +22,11 @@ const (
 	WatchGrace = 5 * time.Minute
 	// PollInterval is how often the watcher asks whether the session has dropped.
 	PollInterval = 2 * time.Second
+	// MinLifetime rejects an implausibly short observation. Two logins close
+	// together mean a failed attempt or a flapping link, not a session that
+	// genuinely lasted that long, and one bad sample would otherwise pin the
+	// estimate low for good.
+	MinLifetime = 30 * time.Minute
 )
 
 // Session is the persisted form of portal.Session. Deliberately no token: the
@@ -34,6 +39,36 @@ type Session struct {
 
 func (s Session) Deadline() time.Time {
 	return s.LoginAt.Add(s.Timeout)
+}
+
+// Observe folds a fresh login into what we know about how long a session lasts.
+//
+// The portal advertises 14400s on its keepalive page and that number is simply
+// not the session lifetime: measured 2026-08-28, a session logged in at 15:30
+// was still alive at 20:29 with the watcher having polled straight through the
+// predicted 19:30 deadline and found nothing. The one drop we have both ends of
+// ran 24h03m. So the lifetime is measured here rather than believed from the
+// portal, which also means a change of campus policy needs no code change.
+//
+// The estimate is the SMALLEST plausible gap ever seen, because every source of
+// error runs one way: a suspended laptop, a closed lid, an undetected drop and a
+// coarse trigger interval can only make an observed gap longer than the true
+// lifetime, never shorter. Taking the minimum converges on the truth from above.
+// Being wrong low is the safe direction anyway — the watcher arms early, finds
+// nothing, and gives up.
+func Observe(prev Session, loginAt time.Time) Session {
+	next := Session{LoginAt: loginAt, Timeout: prev.Timeout}
+
+	if prev.LoginAt.IsZero() {
+		return next
+	}
+
+	observed := loginAt.Sub(prev.LoginAt)
+	if observed >= MinLifetime && (next.Timeout <= 0 || observed < next.Timeout) {
+		next.Timeout = observed
+	}
+
+	return next
 }
 
 // ShouldWatch reports whether now is close enough to the predicted expiry to be

@@ -264,10 +264,14 @@ func authenticate(p *portal.Portal, ssid string) {
 		if err != nil {
 			log.Print(err)
 		} else if settled(p) {
-			saved := session.Session{LoginAt: s.LoginAt, Timeout: s.Timeout}
+			saved := session.Observe(session.Load(session.DefaultPath()), s.LoginAt)
 
-			log.Printf("login successful. Next expiry due %s",
-				saved.Deadline().Format(time.DateTime))
+			if saved.Timeout > 0 {
+				log.Printf("login successful. Sessions last about %s, so the next expiry is due %s",
+					saved.Timeout.Round(time.Minute), saved.Deadline().Format(time.DateTime))
+			} else {
+				log.Print("login successful. No session lifetime measured yet, so the next expiry cannot be anticipated.")
+			}
 
 			if err := session.Save(session.DefaultPath(), saved); err != nil {
 				log.Printf("could not record the session deadline: %v", err)
