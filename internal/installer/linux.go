@@ -11,7 +11,10 @@ import (
 	"os/user"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
+
+	"github.com/plasmaDestroyer/bits-wifi-login/internal/portal"
 )
 
 // sudoWrite is the Go spelling of `sudo tee <path>`, which is how the shell
@@ -105,7 +108,7 @@ func install(exe string) error {
 	if err := run("sudo", "systemctl", "reload", "NetworkManager"); err != nil {
 		fmt.Println("⚠ Could not reload NetworkManager — connectivity checking starts at next restart.")
 	}
-	fmt.Println("✓ NetworkManager connectivity checking enabled.")
+	calibrateConnectivity()
 
 	if err := sudoWrite(resumePath, resumeUnit(exe, u.Username), "0644"); err != nil {
 		return err
@@ -143,6 +146,53 @@ func install(exe string) error {
 	fmt.Println("✓ Timer enabled and started.")
 
 	return nil
+}
+
+// NM's connectivity check is worth having only if NM's own probe can reach the
+// internet, and under a VPN it frequently cannot. Confirmed 2026-08-28 with
+// CloudflareWARP: curl got a clean 204 over both IPv4 and IPv6 while NM's check
+// returned "limited". Forcing it on there is worse than leaving it off — NM
+// reports a working network as broken to every app on the desktop, and, stuck
+// in one wrong state, it can never emit the connectivity-change *transition*
+// that this whole trigger depends on.
+//
+// So do not assume either way. Turn it on, ask NM what it sees, and keep it
+// only if NM agrees with a probe that just succeeded. A VPN switched on later
+// invalidates the answer, which is why triggers() re-reads NM's live verdict
+// and why re-running install is the documented repair.
+func calibrateConnectivity() {
+	if !portal.New().IsLoggedIn() {
+		fmt.Println("⚠ Not online, so NM's connectivity check could not be verified — left as it was.")
+		return
+	}
+
+	if err := setConnectivityCheck(true); err != nil {
+		fmt.Println("⚠ Could not enable NM connectivity checking — the periodic timer is the only trigger.")
+		return
+	}
+
+	state, _ := runOut("nmcli", "networking", "connectivity", "check")
+	if strings.TrimSpace(state) == "full" {
+		fmt.Println("✓ NetworkManager connectivity checking enabled and verified.")
+		return
+	}
+
+	if err := setConnectivityCheck(false); err != nil {
+		fmt.Println("⚠ NM's connectivity check disagrees with the network and could not be turned back off.")
+		return
+	}
+
+	fmt.Printf("⚠ NM reports %q while the network is working — a VPN is most likely\n"+
+		"  intercepting NM's probe. Left off, so the periodic timer is the trigger.\n"+
+		"  Re-run `bits-wifi-login install` if you change your VPN setup.\n",
+		strings.TrimSpace(state))
+}
+
+func setConnectivityCheck(on bool) error {
+	return run("sudo", "busctl", "set-property",
+		"org.freedesktop.NetworkManager", "/org/freedesktop/NetworkManager",
+		"org.freedesktop.NetworkManager", "ConnectivityCheckEnabled",
+		"b", strconv.FormatBool(on))
 }
 
 func uninstall() (int, error) {
@@ -213,10 +263,15 @@ func triggers() []Trigger {
 	// to stop checking, and then it reads the file, reports its uri back, and
 	// never probes. That is invisible from the filesystem and it is what turned
 	// connectivity-change into a dead trigger for weeks. Ask NM itself.
-	found = append(found, Trigger{
-		Name:       "NM connectivity checking (the connectivity-change trigger)",
-		Registered: connectivityCheckEnabled(),
-	})
+	// Naming NM's live verdict matters as much as the on/off bit: a VPN turned on
+	// after install leaves this enabled but wrong, and an NM stuck in one wrong
+	// state emits no transition and so fires nothing.
+	name := "NM connectivity checking (the connectivity-change trigger)"
+	if verdict, err := runOut("nmcli", "networking", "connectivity"); err == nil {
+		name = fmt.Sprintf("%s — NM currently reports %q", name, strings.TrimSpace(verdict))
+	}
+
+	found = append(found, Trigger{Name: name, Registered: connectivityCheckEnabled()})
 
 	return found
 }
@@ -345,29 +400,19 @@ WantedBy=timers.target
 `
 
 // NM only emits connectivity-change if its own connectivity checking is on, and
-// several distros ship it disabled, so this guarantees the mechanism exists.
+// several distros ship it disabled — but `enabled` is deliberately NOT set here.
+// A runtime override lives in /var/lib/NetworkManager/NetworkManager-intern.conf,
+// which NM reads after conf.d and which therefore wins; setting the key in both
+// places just makes it ambiguous which one is in force. calibrateConnectivity
+// drives the D-Bus property instead, so there is exactly one lever.
 //
-// enabled=true is not redundant with setting a uri. Confirmed 2026-08-28: NM
-// reported ConnectivityCheckEnabled=false while happily reporting this file's
-// uri and interval, so it had never probed once and connectivity-change had
-// never fired — thirteen hours of a session drop caught only by the 10-minute
-// fallback timer. Something had switched it off at runtime, which NM records in
-// /var/lib/NetworkManager/NetworkManager-intern.conf. That file is read after
-// conf.d and wins, so this key is the floor, not the last word: check the live
-// value with
-//
-//	busctl get-property org.freedesktop.NetworkManager \
-//	    /org/freedesktop/NetworkManager \
-//	    org.freedesktop.NetworkManager ConnectivityCheckEnabled
-//
-// interval is the rest of the detection budget: nothing notices an expired
+// interval is the detection budget once it is on: nothing notices an expired
 // session until NM's next probe, so at NM's 300s default the session could be
 // dead for five minutes with the machine sitting there. 20s costs one HTTP
 // request to gstatic every 20s — nothing next to a Wi-Fi link that is already
 // idling — and bounds the visible outage at roughly 20s plus the login round
 // trips.
 const connectivityConf = `[connectivity]
-enabled=true
 uri=http://connectivitycheck.gstatic.com/generate_204
 interval=20
 `
