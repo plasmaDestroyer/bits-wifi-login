@@ -15,6 +15,7 @@ import (
 
 	"github.com/plasmaDestroyer/bits-wifi-login/internal/creds"
 	"github.com/plasmaDestroyer/bits-wifi-login/internal/runlog"
+	"github.com/plasmaDestroyer/bits-wifi-login/internal/session"
 )
 
 // Trigger is one background trigger and whether the OS still has it. Asking the
@@ -40,7 +41,11 @@ func Files() []string {
 		files = append(files, exe)
 	}
 
-	files = append(files, creds.DefaultPath())
+	// session.json but not session.lock: the lock is machinery that creates and
+	// removes itself, so it would read as "missing" in status forever and offer
+	// nothing to delete. A stale one left by a killed watcher goes with the
+	// directory, which is what the removal notice says to delete anyway.
+	files = append(files, creds.DefaultPath(), session.DefaultPath())
 
 	if path := runlog.Path(); path != "" {
 		files = append(files, path)

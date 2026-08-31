@@ -3,8 +3,13 @@ package installer
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/plasmaDestroyer/bits-wifi-login/internal/creds"
+	"github.com/plasmaDestroyer/bits-wifi-login/internal/runlog"
+	"github.com/plasmaDestroyer/bits-wifi-login/internal/session"
 )
 
 // Everything an install leaves behind has to be nameable, because "delete
@@ -30,6 +35,24 @@ func TestFilesStartsWithTheBinary(t *testing.T) {
 		if filepath.Dir(path) != filepath.Dir(exe) {
 			t.Errorf("Files() gave %q, which is not beside the binary", path)
 		}
+	}
+}
+
+// Every file the tool writes beside itself has to appear here, or uninstall
+// tells the user to delete a set that is missing one and the state survives a
+// removal they were told was complete. session.json arrived with the expiry
+// watcher and was absent from this list for exactly that reason.
+func TestFilesNamesEverythingWrittenBesideTheBinary(t *testing.T) {
+	files := Files()
+
+	for _, want := range []string{creds.DefaultPath(), session.DefaultPath()} {
+		if !slices.Contains(files, want) {
+			t.Errorf("Files() does not name %q:\n  %s", want, strings.Join(files, "\n  "))
+		}
+	}
+
+	if path := runlog.Path(); path != "" && !slices.Contains(files, path) {
+		t.Errorf("Files() does not name the run log %q:\n  %s", path, strings.Join(files, "\n  "))
 	}
 }
 
