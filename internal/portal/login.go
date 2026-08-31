@@ -182,21 +182,11 @@ func (p *Portal) magicToken() (string, string, bool) {
 		return token, "body-form", true
 	}
 
-	// Last resort. GET / returns an empty reply on the real portal, so this only
-	// helps if the portal changes; it is kept as the "something moved" net.
-	res2, err := p.noFollow.Get(p.baseURL)
-	if err != nil {
-		return "", "", false
-	}
-	defer res2.Body.Close()
-
-	formBody, err := io.ReadAll(res2.Body)
-	if err != nil {
-		return "", "", false
-	}
-	if token, ok := magicFromForm(string(formBody)); ok {
-		return token, "form", true
-	}
-
+	// There used to be a fourth strategy here that fetched the portal root and
+	// looked for a form in it. It was never a net: the real portal empty-replies
+	// on GET /, which is exactly why the body strategy had to exist, so it could
+	// not have matched — and unlike the three above, which are regex checks on a
+	// response already in hand, it paid a whole HTTP request to find that out.
+	// Every login on record fired "body".
 	return "", "", false
 }
