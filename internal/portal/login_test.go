@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/plasmaDestroyer/bits-wifi-login/internal/creds"
 )
@@ -258,5 +259,36 @@ func TestLoginReportsAlreadyOnlineWhenTheProbeAnswers204(t *testing.T) {
 
 	if !errors.Is(err, ErrAlreadyOnline) {
 		t.Errorf("Login() = %v, want ErrAlreadyOnline", err)
+	}
+}
+
+// The probe must give up on its own short deadline rather than the client's long
+// one. A dropped session makes the probe hang, and it is paid twice per recovery
+// — measured as most of a 23s outage on 2026-08-31.
+func TestProbeGivesUpOnItsOwnDeadline(t *testing.T) {
+	blocked := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-blocked // hang exactly like a network that just went away
+	}))
+	defer srv.Close()
+	defer close(blocked)
+
+	restore := probeTimeout
+	probeTimeout = 150 * time.Millisecond
+	defer func() { probeTimeout = restore }()
+
+	p := Portal{noFollow: srv.Client(), connectivityURL: srv.URL, baseURL: srv.URL}
+
+	start := time.Now()
+	online := p.IsLoggedIn()
+	elapsed := time.Since(start)
+
+	if online {
+		t.Error("IsLoggedIn() = true against a server that never answers")
+	}
+	// The client's own Timeout is 10s; anything near that means the probe
+	// deadline was ignored and the recovery is slow again.
+	if elapsed > time.Second {
+		t.Errorf("IsLoggedIn() took %v, want it bounded by probeTimeout", elapsed)
 	}
 }

@@ -1,6 +1,7 @@
 package portal
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
@@ -12,6 +13,20 @@ const (
 	connectivityURL = "http://connectivitycheck.gstatic.com/generate_204"
 	timeout         = 10 * time.Second
 )
+
+// probeTimeout bounds the connectivity probe alone, not the login round trips —
+// the portal is slow and flaky enough on those to want the full 10s.
+//
+// A working network answers generate_204 in well under 100ms, so 10s on the
+// probe only ever costs: it is paid in full precisely when the session has just
+// dropped and the request hangs. Measured 2026-08-31, that was most of a 23s
+// recovery, since both IsLoggedIn and the token probe pay it back to back.
+//
+// Timing out early on a genuinely slow link is safe rather than harmful: the
+// login that follows re-probes, gets a 204, and returns ErrAlreadyOnline.
+//
+// A var, not a const, so tests need not sleep for real seconds.
+var probeTimeout = 3 * time.Second
 
 type Portal struct {
 	noFollow        *http.Client
@@ -60,7 +75,16 @@ func New() *Portal {
 // one situation where the latency is visible: someone sitting at a dead network
 // waiting to be let back on.
 func (p *Portal) probe() (int, error) {
-	res, err := p.noFollow.Get(p.connectivityURL)
+	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.connectivityURL, nil)
+	if err != nil {
+		p.fresh = false
+		return 0, err
+	}
+
+	res, err := p.noFollow.Do(req)
 	if err != nil {
 		p.fresh = false
 		return 0, err
