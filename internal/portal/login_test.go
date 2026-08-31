@@ -1,6 +1,7 @@
 package portal
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -237,5 +238,25 @@ func TestMagicToken(t *testing.T) {
 					token, which, ok, c.wantToken, c.wantWhich, c.wantOk)
 			}
 		})
+	}
+}
+
+// A transient outage that heals between IsLoggedIn's probe and the token probe
+// used to spend four login attempts and then exit fatally, because a 204 has no
+// magic token in it. Seen live twice on 2026-08-31.
+func TestLoginReportsAlreadyOnlineWhenTheProbeAnswers204(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	noFollow := srv.Client()
+	noFollow.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	p := Portal{noFollow: noFollow, follow: srv.Client(), connectivityURL: srv.URL, baseURL: srv.URL}
+
+	_, err := p.Login(creds.Creds{Username: "u", Password: "p"})
+
+	if !errors.Is(err, ErrAlreadyOnline) {
+		t.Errorf("Login() = %v, want ErrAlreadyOnline", err)
 	}
 }

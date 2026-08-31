@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"net/url"
 	"os"
 	"time"
@@ -25,10 +26,23 @@ type Session struct {
 	LoginAt time.Time
 }
 
+// ErrAlreadyOnline means the probe answered 204 on the way to logging in, so
+// there is nothing to log into. It happens when a transient outage heals between
+// IsLoggedIn's probe failing and the token probe being made — seen twice on
+// 2026-08-31, where a network hiccup at 11:37 and 12:46 sent a healthy machine
+// through four login attempts and a fatal "all attempts failed".
+var ErrAlreadyOnline = errors.New("portal: already online")
+
 func (p *Portal) Login(c creds.Creds) (Session, error) {
 	magic, which, ok := p.magicToken()
 
 	if !ok {
+		// Check this before reporting a missing token: a 204 is not a portal we
+		// failed to parse, it is no portal at all.
+		if p.interceptStatus == http.StatusNoContent {
+			return Session{}, ErrAlreadyOnline
+		}
+
 		return Session{}, noMagicError(p.interceptBody, p.interceptStatus, p.interceptLocation)
 	}
 

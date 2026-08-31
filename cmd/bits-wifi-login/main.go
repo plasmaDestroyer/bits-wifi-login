@@ -7,6 +7,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -261,6 +262,14 @@ func authenticate(p *portal.Portal, ssid string) {
 		log.Printf("attempt %d/%d...", attempt, attempts)
 
 		s, err := p.Login(c)
+		if errors.Is(err, portal.ErrAlreadyOnline) {
+			// The outage healed by itself between the two probes. Nothing was
+			// wrong and nothing needs doing, so do not burn the remaining
+			// attempts and do not exit non-zero over it.
+			log.Print("connectivity came back on its own, nothing to do.")
+
+			return
+		}
 		if err != nil {
 			log.Print(err)
 		} else if settled(p) {
