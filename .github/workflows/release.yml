@@ -40,7 +40,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: "0"
         run: |
-          go build -trimpath -ldflags="-s -w" \
+          go build -trimpath -ldflags="-s -w -X main.version=${GITHUB_REF_NAME}" \
             -o "bits-wifi-login-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}" \
             ./cmd/bits-wifi-login
 

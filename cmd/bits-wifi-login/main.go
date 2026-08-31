@@ -37,6 +37,11 @@ const (
 	retryDelay    = 3 * time.Second
 )
 
+// version is stamped by the release build (-ldflags -X main.version=<tag>).
+// "dev" for anything built locally, which is the honest answer: a local build
+// has no release to be.
+var version = "dev"
+
 func main() {
 	// Date included: the dispatcher log is an append-only file read days later,
 	// and bare clock times there are ambiguous exactly when it matters.
@@ -56,6 +61,8 @@ func main() {
 		fatal(installer.Uninstall())
 	case "status":
 		status()
+	case "version", "-v", "--version":
+		fmt.Println(version)
 	case "-h", "--help", "help":
 		usage(os.Stdout)
 	default:
@@ -72,6 +79,7 @@ func usage(w *os.File) {
   bits-wifi-login install      set up credentials and background triggers
   bits-wifi-login uninstall    remove the background triggers
   bits-wifi-login status       where everything lives and whether it is working
+  bits-wifi-login version      which release this binary is
 `)
 }
 
@@ -86,7 +94,7 @@ func fatal(err error) {
 // the last one that fired did anything. Without it the only evidence the tool
 // exists is the absence of a captive portal.
 func status() {
-	fmt.Println("bits-wifi-login")
+	fmt.Println("bits-wifi-login " + version)
 
 	fmt.Println("\n  Files")
 	for _, path := range installer.Files() {
