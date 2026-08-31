@@ -19,9 +19,10 @@ jobs:
         # The generators themselves (plist, task XML) are deliberately untagged and
         # unit-tested on every platform — see darwinplist.go and windowstask.go.
         #
-        # Still not covered: actually loading the agent or the task. The schtasks
-        # round-trip is opt-in (BITS_WIFI_TEST_SCHTASKS=1) because it registers a
-        # real task, and launchctl needs a GUI session a headless runner lacks.
+        # windows-latest also runs the real schtasks round-trip, enabled below.
+        #
+        # Still not covered: loading the launchd agent, which needs a GUI session
+        # a headless runner does not have.
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
@@ -39,6 +40,13 @@ jobs:
 
       - name: Test
         run: go test ./...
+        env:
+          # windows-latest is a real, throwaway Windows box, so let the schtasks
+          # round-trip actually register a task. It is the only check that proves
+          # Task Scheduler accepts the generated XML — everything short of it can
+          # be green while schtasks rejects the file for a reason it will not
+          # explain. The test uses a throwaway task name and always deletes it.
+          BITS_WIFI_TEST_SCHTASKS: ${{ matrix.os == 'windows-latest' && '1' || '0' }}
 
       - name: Build
         run: go build ./...
