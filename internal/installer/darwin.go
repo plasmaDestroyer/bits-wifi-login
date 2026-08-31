@@ -10,8 +10,6 @@ import (
 	"strings"
 )
 
-const label = "ac.bits.wifi-login"
-
 func plistPath() string {
 	return filepath.Join(os.Getenv("HOME"), "Library", "LaunchAgents", label+".plist")
 }
@@ -111,36 +109,4 @@ func summary() string {
 		"    log show --predicate 'process == \"bits-wifi-login\"' --last 1h\n\n" +
 		"  Repair:\n" +
 		"    Re-run `bits-wifi-login install` if triggers or permissions break.\n"
-}
-
-// 5 minutes rather than Linux's 10: WatchPaths only fires on network changes,
-// and macOS has no equivalent of NM's connectivity-change, so this poll is the
-// only thing that notices the portal session expiring.
-func plist(exe string) string {
-	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>%s</string>
-
-    <key>ProgramArguments</key>
-    <array>
-        <string>%s</string>
-    </array>
-
-    <key>WatchPaths</key>
-    <array>
-        <string>/var/run/resolv.conf</string>
-    </array>
-
-    <key>StartInterval</key>
-    <integer>300</integer>
-
-    <key>RunAtLoad</key>
-    <true/>
-</dict>
-</plist>
-`, label, xmlEscape(exe))
 }

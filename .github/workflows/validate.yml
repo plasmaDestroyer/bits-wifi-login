@@ -11,10 +11,17 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        # macOS and Windows are compile-and-unit validation only — the launchd and
-        # Task Scheduler paths have never been exercised on real hardware. The
-        # schtasks round-trip test is opt-in (BITS_WIFI_TEST_SCHTASKS=1) because it
-        # registers a real task, so it stays skipped here.
+        # macos-latest and windows-latest are real machines, so use them for the
+        # checks that cannot run anywhere else: TestPlistIsWellFormed shells out to
+        # plutil, which is what launchd itself validates with, and is the closest
+        # thing to "would macOS accept this file" without owning a Mac.
+        #
+        # The generators themselves (plist, task XML) are deliberately untagged and
+        # unit-tested on every platform — see darwinplist.go and windowstask.go.
+        #
+        # Still not covered: actually loading the agent or the task. The schtasks
+        # round-trip is opt-in (BITS_WIFI_TEST_SCHTASKS=1) because it registers a
+        # real task, and launchctl needs a GUI session a headless runner lacks.
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
