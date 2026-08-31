@@ -74,9 +74,7 @@ func install(exe string) error {
 		return fmt.Errorf("installer: cannot determine the current user: %w", err)
 	}
 
-	// The dispatcher's output used to go to a predictable /tmp path, which any
-	// local user could pre-create as a symlink. Keep it under the user's own
-	// state dir instead; the systemd units are covered by journald already.
+	// Not /tmp: a predictable path there is a symlink-attack target.
 	logDir := filepath.Join(u.HomeDir, ".local", "state", "bits-wifi-login")
 	if err := os.MkdirAll(logDir, 0700); err != nil {
 		return fmt.Errorf("installer: creating %s: %w", logDir, err)
@@ -89,10 +87,8 @@ func install(exe string) error {
 
 	fmt.Println("Installing background triggers (sudo may prompt)...")
 
-	// Prime the sudo timestamp before touching /etc. sudoWrite pipes file content
-	// on stdin, so sudo must fall back to /dev/tty for the password — without a
-	// terminal it fails, and doing that check here means it fails before the first
-	// write rather than halfway through, leaving a partial install.
+	// Prime sudo before touching /etc: sudoWrite pipes content on stdin, so sudo
+	// needs /dev/tty for the password. Failing here beats a partial install.
 	if err := run("sudo", "-v"); err != nil {
 		return errors.New("installer: sudo could not authenticate — run this straight from a terminal (it cannot prompt for a password through a pipe or an editor console)")
 	}
@@ -148,18 +144,14 @@ func install(exe string) error {
 	return nil
 }
 
-// NM's connectivity check is worth having only if NM's own probe can reach the
-// internet, and under a VPN it frequently cannot. Confirmed 2026-08-28 with
-// CloudflareWARP: curl got a clean 204 over both IPv4 and IPv6 while NM's check
-// returned "limited". Forcing it on there is worse than leaving it off — NM
-// reports a working network as broken to every app on the desktop, and, stuck
-// in one wrong state, it can never emit the connectivity-change *transition*
-// that this whole trigger depends on.
+// Under a VPN, NM's own probe often cannot get out: confirmed 2026-08-28, curl
+// got a clean 204 while NM's check said "limited". Forcing it on there is worse
+// than off — NM reports a working network as broken to every app, and, stuck in
+// one wrong state, can never emit the *transition* this trigger needs.
 //
-// So do not assume either way. Turn it on, ask NM what it sees, and keep it
-// only if NM agrees with a probe that just succeeded. A VPN switched on later
-// invalidates the answer, which is why triggers() re-reads NM's live verdict
-// and why re-running install is the documented repair.
+// So do not assume: enable, ask NM what it sees, keep it only if NM agrees with
+// a probe that just succeeded. A VPN enabled later invalidates that, which is
+// why triggers() re-reads the live verdict and re-running install is the repair.
 func calibrateConnectivity() {
 	if !portal.New().IsLoggedIn() {
 		fmt.Println("⚠ Not online, so NM's connectivity check could not be verified — left as it was.")
@@ -263,9 +255,8 @@ func triggers() []Trigger {
 	// to stop checking, and then it reads the file, reports its uri back, and
 	// never probes. That is invisible from the filesystem and it is what turned
 	// connectivity-change into a dead trigger for weeks. Ask NM itself.
-	// Naming NM's live verdict matters as much as the on/off bit: a VPN turned on
-	// after install leaves this enabled but wrong, and an NM stuck in one wrong
-	// state emits no transition and so fires nothing.
+	// The live verdict matters as much as the on/off bit: a VPN enabled after
+	// install leaves this on but wrong, and a stuck NM fires nothing.
 	name := "NM connectivity checking (the connectivity-change trigger)"
 	if verdict, err := runOut("nmcli", "networking", "connectivity"); err == nil {
 		name = fmt.Sprintf("%s — NM currently reports %q", name, strings.TrimSpace(verdict))
@@ -327,12 +318,9 @@ fi
 `, exe, logPath, username)
 }
 
-// TimeoutStartSec=0 because a run that lands near the portal's expiry camps on it
-// and polls, which takes minutes. Type=oneshot already defaults to no start
-// timeout, so this is stated rather than needed — it stops a distro-level
-// DefaultTimeoutStartSec or a later change of Type from silently capping the
-// watcher, which would look like the feature was installed and simply never
-// firing. Windows had the same hazard for real: its task XML capped runs at PT2M.
+// TimeoutStartSec=0 because a run near the expiry camps on it for minutes.
+// oneshot already defaults to no timeout; stating it stops a distro-level
+// DefaultTimeoutStartSec from silently capping the watcher.
 func serviceUnit(exe, username string) string {
 	return fmt.Sprintf(`[Unit]
 Description=BITS WiFi Fortinet Login
@@ -376,17 +364,14 @@ WantedBy=suspend.target hibernate.target hybrid-sleep.target suspend-then-hibern
 `, username, exe)
 }
 
-// The portal session expires on a fixed ~4h boundary, so a bare polling timer
-// aliases against it: a tick landing just before expiry no-ops and the next one
-// is a whole interval away. connectivity-change is what actually closes that,
-// which leaves this as a fallback for hosts where NM connectivity checking is
-// off — 10 minutes, not the 30 that produced the long waits.
-// OnCalendar, not OnUnitActiveSec: the latter re-arms only against the last
-// *service* activation, so if the service has not run for a while and the timer
-// is then restarted, every trigger evaluates into the past and the unit parks in
-// `active (elapsed)` with `Trigger: n/a` — dead forever, silently. A wall-clock
-// expression always has a next occurrence. Check with `systemctl list-timers`:
-// a healthy timer shows a NEXT, a broken one shows `-`.
+// A fallback only: the session expires on a fixed wall-clock instant, which a
+// bare poll aliases against — measured 2026-08-29, this tick fired 12s before
+// the drop and the next chance was 10 minutes later. The watcher is what
+// actually catches expiries.
+//
+// OnCalendar, not OnUnitActiveSec: the latter re-arms against the last *service*
+// activation, so a restart can evaluate every trigger into the past and park the
+// unit in `active (elapsed)` forever. `systemctl list-timers` shows NEXT as `-`.
 const timerUnit = `[Unit]
 Description=BITS WiFi Login periodic check
 
@@ -399,19 +384,11 @@ Persistent=true
 WantedBy=timers.target
 `
 
-// NM only emits connectivity-change if its own connectivity checking is on, and
-// several distros ship it disabled — but `enabled` is deliberately NOT set here.
-// A runtime override lives in /var/lib/NetworkManager/NetworkManager-intern.conf,
-// which NM reads after conf.d and which therefore wins; setting the key in both
-// places just makes it ambiguous which one is in force. calibrateConnectivity
-// drives the D-Bus property instead, so there is exactly one lever.
-//
-// interval is the detection budget once it is on: nothing notices an expired
-// session until NM's next probe, so at NM's 300s default the session could be
-// dead for five minutes with the machine sitting there. 20s costs one HTTP
-// request to gstatic every 20s — nothing next to a Wi-Fi link that is already
-// idling — and bounds the visible outage at roughly 20s plus the login round
-// trips.
+// `enabled` is deliberately NOT set here: a runtime override in
+// /var/lib/NetworkManager/NetworkManager-intern.conf is read after conf.d and
+// wins, so calibrateConnectivity drives the D-Bus property and there is exactly
+// one lever. interval is the detection budget once it is on; NM's 300s default
+// would leave a dead session for five minutes.
 const connectivityConf = `[connectivity]
 uri=http://connectivitycheck.gstatic.com/generate_204
 interval=20

@@ -30,8 +30,8 @@ const (
 	// seconds and left the network dead until the next 10-minute tick. Backed
 	// off instead: 3s, 6s, 12s, ~21s of trying.
 	attempts = 4
-	// The portal needs a moment before the session is live. Polled rather than
-	// slept through, because this delay is paid on every single login.
+	// The portal needs a moment before the session is live. Polled, not slept:
+	// this delay is paid on every login.
 	settleTimeout = 3 * time.Second
 	settleStep    = 250 * time.Millisecond
 	retryDelay    = 3 * time.Second
@@ -191,15 +191,11 @@ func login() {
 	authenticate(p, ssid)
 }
 
-// watch camps on a session that is about to expire. The portal drops us on a
-// fixed timer, which makes it the one network event that can be seen coming: a
-// trigger landing in the last few minutes before the deadline polls until the
-// drop actually happens, instead of leaving it to NetworkManager to notice on
-// its own schedule.
+// watch camps on a session about to expire. The portal drops us on a fixed
+// timer, so it is the one network event that can be seen coming.
 //
-// Everything here is best-effort. Missing state, a lock held elsewhere, a
-// deadline that never arrives — all of it just returns, and the ordinary
-// reactive path handles the expiry as it did before.
+// Best-effort throughout: missing state, a lock held elsewhere or a deadline
+// that never arrives all just return, and the reactive path handles it.
 func watch(p *portal.Portal) {
 	s := session.Load(session.DefaultPath())
 
@@ -247,11 +243,9 @@ func authenticate(p *portal.Portal, ssid string) {
 		log.Printf("not logged in. Authenticating to %s...", ssid)
 	}
 
-	// How far the portal's clock ran from ours. The only calibration data there
-	// is, since the portal reports nothing about a live session. Logged here
-	// rather than in watch() so it is captured on the reactive path too — the
-	// path that runs precisely when the watcher failed to arm, which is the case
-	// most worth measuring.
+	// How far the portal's clock ran from ours. Logged here rather than in watch()
+	// so the reactive path is measured too — that is the path that runs when the
+	// watcher failed to arm, which is the case most worth knowing about.
 	if prev := session.Load(session.DefaultPath()); !prev.LoginAt.IsZero() {
 		log.Printf("expiry noticed %s after the predicted deadline of %s",
 			time.Since(prev.Deadline()).Round(time.Second),
