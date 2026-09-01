@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/plasmaDestroyer/bits-wifi-login/internal/creds"
 	"github.com/plasmaDestroyer/bits-wifi-login/internal/runlog"
@@ -90,5 +91,34 @@ func TestWhereSaysHowToRemoveIt(t *testing.T) {
 	}
 	if !strings.Contains(got, filepath.Dir(exe)) {
 		t.Errorf("the install summary never says which folder to delete:\n%s", got)
+	}
+}
+
+// Under a pipe or in CI there is no terminal to animate, and a redirected
+// install log must not collect thousands of carriage returns. spin returns nil
+// there, and a nil spinner still has to print its result rather than panic.
+func TestSpinnerWithoutATerminal(t *testing.T) {
+	s := spin("working")
+
+	if s != nil {
+		t.Error("spin() animated with no terminal on stdout")
+	}
+
+	s.done("✓ done") // must not panic on the nil receiver
+}
+
+// The whole point is that it stops. A frame left running would keep writing over
+// whatever the install printed next.
+func TestSpinnerStops(t *testing.T) {
+	s := &spinner{stop: make(chan struct{}), finished: make(chan struct{})}
+	go func() { <-s.stop; close(s.finished) }()
+
+	done := make(chan struct{})
+	go func() { s.done("✓ stopped"); close(done) }()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("done() did not return; the animation goroutine was never joined")
 	}
 }

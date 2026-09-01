@@ -155,13 +155,18 @@ func install(exe string) error {
 // a probe that just succeeded. A VPN enabled later invalidates that, which is
 // why triggers() re-reads the live verdict and re-running install is the repair.
 func calibrateConnectivity() {
+	// The one step of the install that can take seconds. Everything else here
+	// prints a ✓ within milliseconds, so silence at exactly this point is what
+	// makes the install look wedged.
+	sp := spin("Checking whether NetworkManager can see the network...")
+
 	if !portal.New().IsLoggedIn() {
-		fmt.Println("⚠ Not online, so NM's connectivity check could not be verified — left as it was.")
+		sp.done("⚠ Not online, so NM's connectivity check could not be verified — left as it was.")
 		return
 	}
 
 	if err := setConnectivityCheck(true); err != nil {
-		fmt.Println("⚠ Could not enable NM connectivity checking — the periodic timer is the only trigger.")
+		sp.done("⚠ Could not enable NM connectivity checking — the periodic timer is the only trigger.")
 		return
 	}
 
@@ -175,25 +180,25 @@ func calibrateConnectivity() {
 	state, err := nmConnectivity(checkTimeout)
 	if err != nil {
 		_ = setConnectivityCheck(false)
-		fmt.Printf("⚠ NM's connectivity check did not answer within %s, so it is too slow to\n"+
-			"  detect a drop. Left off, so the periodic timer is the trigger.\n", checkTimeout)
+		sp.done(fmt.Sprintf("⚠ NM's connectivity check did not answer within %s, so it is too slow\n"+
+			"  to detect a drop. Left off, so the periodic timer is the trigger.", checkTimeout))
 
 		return
 	}
 
 	if state == "full" {
-		fmt.Println("✓ NetworkManager connectivity checking enabled and verified.")
+		sp.done("✓ NetworkManager connectivity checking enabled and verified.")
 		return
 	}
 
 	if err := setConnectivityCheck(false); err != nil {
-		fmt.Println("⚠ NM's connectivity check disagrees with the network and could not be turned back off.")
+		sp.done("⚠ NM's connectivity check disagrees with the network and could not be turned back off.")
 		return
 	}
 
-	fmt.Printf("⚠ NM reports %q while the network is working — a VPN is most likely\n"+
+	sp.done(fmt.Sprintf("⚠ NM reports %q while the network is working — a VPN is most likely\n"+
 		"  intercepting NM's probe. Left off, so the periodic timer is the trigger.\n"+
-		"  Re-run `bits-wifi-login install` if you change your VPN setup.\n", state)
+		"  Re-run `bits-wifi-login install` if you change your VPN setup.", state))
 }
 
 // checkTimeout is generous for a probe that a working network answers in well
