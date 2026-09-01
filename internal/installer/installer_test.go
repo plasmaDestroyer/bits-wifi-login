@@ -3,7 +3,6 @@ package installer
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -91,27 +90,5 @@ func TestWhereSaysHowToRemoveIt(t *testing.T) {
 	}
 	if !strings.Contains(got, filepath.Dir(exe)) {
 		t.Errorf("the install summary never says which folder to delete:\n%s", got)
-	}
-}
-
-// The silent prompt looks like a frozen terminal to someone who has not met one,
-// which is a Windows and macOS problem — a Linux user installing a CLI has.
-func TestHiddenNote(t *testing.T) {
-	got := hiddenNote()
-
-	if runtime.GOOS == "linux" {
-		if got != "" {
-			t.Errorf("hiddenNote() = %q on linux, want it silent", got)
-		}
-
-		return
-	}
-
-	if !strings.Contains(got, "Nothing appears as you type") {
-		t.Errorf("hiddenNote() = %q on %s, want it to explain the silent prompt", got, runtime.GOOS)
-	}
-	// Its own line, so the prompt after it starts at the left margin.
-	if !strings.HasSuffix(got, "\n") {
-		t.Errorf("hiddenNote() = %q, want it to end the line", got)
 	}
 }

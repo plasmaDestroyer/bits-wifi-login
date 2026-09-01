@@ -9,10 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
-
-	"golang.org/x/term"
 
 	"github.com/plasmaDestroyer/bits-wifi-login/internal/creds"
 	"github.com/plasmaDestroyer/bits-wifi-login/internal/runlog"
@@ -162,17 +159,6 @@ func leftovers() string {
 	return b.String()
 }
 
-// hiddenNote explains the silent password prompt where that is worth doing.
-// Its own line, not a parenthetical: inline, it pushed the prompt so far right
-// that the cursor landed near the edge of an 80-column terminal.
-func hiddenNote() string {
-	if runtime.GOOS == "linux" {
-		return ""
-	}
-
-	return "  Nothing appears as you type — that is normal.\n"
-}
-
 func ensureCreds(path string) error {
 	if _, err := os.Stat(path); err == nil {
 		fmt.Println("✓ creds.conf already exists, skipping.")
@@ -204,17 +190,11 @@ func prompt() (creds.Creds, error) {
 	}
 	username = strings.TrimSpace(username)
 
-	// term.ReadPassword echoes nothing at all — not even asterisks, and the cursor
-	// does not move — which is indistinguishable from a frozen terminal to someone
-	// who has not seen it before, and they retype, paste, or kill the installer.
-	//
-	// Said on Windows and macOS only. Anyone installing this on Linux has met a
-	// silent password prompt before, and explaining it to them is noise.
-	fmt.Print(hiddenNote())
 	fmt.Print("Enter your BITS password: ")
 
-	password, err := term.ReadPassword(int(os.Stdin.Fd()))
-	fmt.Println()
+	// Echoes a star per character, so the prompt cannot be mistaken for a frozen
+	// terminal and no explanatory line is needed on any platform.
+	password, err := readMasked(int(os.Stdin.Fd()))
 	if err != nil {
 		return creds.Creds{}, fmt.Errorf("installer: reading password: %w — run this straight from a terminal, it cannot read a password through a pipe", err)
 	}
