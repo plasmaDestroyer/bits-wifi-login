@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"golang.org/x/term"
@@ -161,6 +162,15 @@ func leftovers() string {
 	return b.String()
 }
 
+// hiddenNote explains the silent password prompt where that is worth doing.
+func hiddenNote() string {
+	if runtime.GOOS == "linux" {
+		return ""
+	}
+
+	return " (hidden — nothing appears as you type, press Enter when done)"
+}
+
 func ensureCreds(path string) error {
 	if _, err := os.Stat(path); err == nil {
 		fmt.Println("✓ creds.conf already exists, skipping.")
@@ -192,10 +202,13 @@ func prompt() (creds.Creds, error) {
 	}
 	username = strings.TrimSpace(username)
 
-	// term.ReadPassword echoes nothing at all — not even asterisks, and the
-	// cursor does not move — so say so. Otherwise the prompt is indistinguishable
-	// from a frozen terminal and people retype, paste, or kill the installer.
-	fmt.Print("Enter your BITS password (hidden — nothing appears as you type, press Enter when done): ")
+	// term.ReadPassword echoes nothing at all — not even asterisks, and the cursor
+	// does not move — which is indistinguishable from a frozen terminal to someone
+	// who has not seen it before, and they retype, paste, or kill the installer.
+	//
+	// Said on Windows and macOS only. Anyone installing this on Linux has met a
+	// silent password prompt before, and explaining it to them is noise.
+	fmt.Print("Enter your BITS password" + hiddenNote() + ": ")
 
 	password, err := term.ReadPassword(int(os.Stdin.Fd()))
 	fmt.Println()
