@@ -138,3 +138,27 @@ func TestNMConnectivityGivesUpOnItsOwnDeadline(t *testing.T) {
 		t.Errorf("nmConnectivity() took %v, want it bounded by the deadline", elapsed)
 	}
 }
+
+// Listing connectivity-change as a live trigger when calibration has just turned
+// it off tells the user they have drop detection they do not have, and makes the
+// 10-minute timer look like a backup when it is the only thing running.
+func TestSummaryMatchesWhatIsActuallyEnabled(t *testing.T) {
+	got := summary()
+	on := connectivityCheckEnabled()
+
+	if on != strings.Contains(got, "connectivity-change") {
+		t.Errorf("summary() names connectivity-change = %v, but it is enabled = %v\n%s",
+			!on, on, got)
+	}
+
+	if !on && !strings.Contains(got, "ONLY drop detection") {
+		t.Errorf("summary() does not say the timer is the only detection left:\n%s", got)
+	}
+
+	// Whatever the state, these are always installed.
+	for _, want := range []string{"dispatcher", "resume", "systemd timer"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("summary() is missing %q:\n%s", want, got)
+		}
+	}
+}

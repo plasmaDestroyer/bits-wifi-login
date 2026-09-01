@@ -19,11 +19,15 @@ import (
 	"github.com/plasmaDestroyer/bits-wifi-login/internal/portal"
 )
 
-// sudoWrite is the Go spelling of `sudo tee <path>`, which is how the shell
-// installer wrote into /etc without the whole program running as root —
+// sudoWrite writes into /etc without the whole program running as root —
 // creds.conf must stay owned by the user who actually logs in.
+//
+// `install -m`, not `tee` then `chmod`: one privileged process per file instead
+// of two, and the file is never briefly on disk with the wrong mode. It also
+// halves the number of sudo invocations an install makes, which matters because
+// each one is a chance for the sudo timestamp to have expired mid-run.
 func sudoWrite(path, content, mode string) error {
-	cmd := exec.Command("sudo", "tee", path)
+	cmd := exec.Command("sudo", "install", "-m", mode, "/dev/stdin", path)
 	cmd.Stdin = strings.NewReader(content)
 	cmd.Stdout = io.Discard
 	cmd.Stderr = os.Stderr
@@ -32,7 +36,7 @@ func sudoWrite(path, content, mode string) error {
 		return fmt.Errorf("installer: writing %s: %w", path, err)
 	}
 
-	return run("sudo", "chmod", mode, path)
+	return nil
 }
 
 const (
@@ -319,12 +323,25 @@ func connectivityCheckEnabled() bool {
 	return err == nil && strings.TrimSpace(out) == "b true"
 }
 
+// The connectivity-change line is conditional, because calibration may have just
+// turned that trigger off — listing it anyway told the user they had drop
+// detection they did not have, and made the 10-minute timer look like a backup
+// when it was in fact the only thing running.
 func summary() string {
+	drop := "    - The moment NM notices connectivity dropped (connectivity-change)\n"
+	timer := "    - Every 10 minutes (systemd timer, persistent across sleep)\n"
+
+	if !connectivityCheckEnabled() {
+		drop = ""
+		timer = "    - Every 10 minutes (systemd timer) — the ONLY drop detection on this\n" +
+			"      machine, since NM's connectivity check is off\n"
+	}
+
 	return "  Triggers:\n" +
 		"    - Every WiFi connect to a BITS network (NetworkManager dispatcher)\n" +
-		"    - The moment NM notices connectivity dropped (connectivity-change)\n" +
+		drop +
 		"    - Every resume from suspend/sleep (systemd resume service)\n" +
-		"    - Every 10 minutes (systemd timer, persistent across sleep)\n\n" +
+		timer + "\n" +
 		"  Logs:\n" +
 		"    journalctl -u bits-wifi-login.service --since today\n" +
 		"    tail ~/.local/state/bits-wifi-login/dispatcher.log\n\n" +
