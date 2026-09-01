@@ -110,7 +110,12 @@ func install(exe string) error {
 	if err := run("sudo", "systemctl", "reload", "NetworkManager"); err != nil {
 		fmt.Println("⚠ Could not reload NetworkManager — connectivity checking starts at next restart.")
 	}
-	calibrateConnectivity()
+	// NM's probe can block for seconds and nothing below this line depends on it,
+	// so let it run while the systemd units go in. On a machine where the probe
+	// is broken — the case that made an install sit silent for ten seconds — the
+	// whole systemd half now happens inside that wait.
+	verdict := make(chan string, 1)
+	go func() { verdict <- calibrateConnectivity() }()
 
 	if err := sudoWrite(resumePath, resumeUnit(exe, u.Username), "0644"); err != nil {
 		return err
@@ -147,6 +152,16 @@ func install(exe string) error {
 	}
 	fmt.Println("✓ Timer enabled and started.")
 
+	// Usually already waiting by now, in which case this prints immediately. Only
+	// spin if NM is genuinely still thinking, so the animation appears exactly
+	// when there would otherwise be silence.
+	select {
+	case line := <-verdict:
+		fmt.Println(line)
+	default:
+		spin("Waiting for NetworkManager's connectivity check...").done(<-verdict)
+	}
+
 	return nil
 }
 
@@ -158,20 +173,15 @@ func install(exe string) error {
 // So do not assume: enable, ask NM what it sees, keep it only if NM agrees with
 // a probe that just succeeded. A VPN enabled later invalidates that, which is
 // why triggers() re-reads the live verdict and re-running install is the repair.
-func calibrateConnectivity() {
-	// The one step of the install that can take seconds. Everything else here
-	// prints a ✓ within milliseconds, so silence at exactly this point is what
-	// makes the install look wedged.
-	sp := spin("Checking whether NetworkManager can see the network...")
-
+// Returns the line to print rather than printing it, because it runs
+// concurrently with the rest of the install and output has to stay ordered.
+func calibrateConnectivity() string {
 	if !portal.New().IsLoggedIn() {
-		sp.done("⚠ Not online, so NM's connectivity check could not be verified — left as it was.")
-		return
+		return "⚠ Not online, so NM's connectivity check could not be verified — left as it was."
 	}
 
 	if err := setConnectivityCheck(true); err != nil {
-		sp.done("⚠ Could not enable NM connectivity checking — the periodic timer is the only trigger.")
-		return
+		return "⚠ Could not enable NM connectivity checking — the periodic timer is the only trigger."
 	}
 
 	// Bounded, because `connectivity check` forces NM to probe for real and a
@@ -184,25 +194,22 @@ func calibrateConnectivity() {
 	state, err := nmConnectivity(checkTimeout)
 	if err != nil {
 		_ = setConnectivityCheck(false)
-		sp.done(fmt.Sprintf("⚠ NM's connectivity check did not answer within %s, so it is too slow\n"+
-			"  to detect a drop. Left off, so the periodic timer is the trigger.", checkTimeout))
 
-		return
+		return fmt.Sprintf("⚠ NM's connectivity check did not answer within %s, so it is too slow\n"+
+			"  to detect a drop. Left off, so the periodic timer is the trigger.", checkTimeout)
 	}
 
 	if state == "full" {
-		sp.done("✓ NetworkManager connectivity checking enabled and verified.")
-		return
+		return "✓ NetworkManager connectivity checking enabled and verified."
 	}
 
 	if err := setConnectivityCheck(false); err != nil {
-		sp.done("⚠ NM's connectivity check disagrees with the network and could not be turned back off.")
-		return
+		return "⚠ NM's connectivity check disagrees with the network and could not be turned back off."
 	}
 
-	sp.done(fmt.Sprintf("⚠ NM reports %q while the network is working — a VPN is most likely\n"+
+	return fmt.Sprintf("⚠ NM reports %q while the network is working — a VPN is most likely\n"+
 		"  intercepting NM's probe. Left off, so the periodic timer is the trigger.\n"+
-		"  Re-run `bits-wifi-login install` if you change your VPN setup.", state))
+		"  Re-run `bits-wifi-login install` if you change your VPN setup.", state)
 }
 
 // checkTimeout is generous for a probe that a working network answers in well
