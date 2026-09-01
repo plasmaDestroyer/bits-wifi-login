@@ -16,6 +16,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"golang.org/x/term"
 )
 
 const (
@@ -97,6 +99,12 @@ func To(tag string) error {
 		return fmt.Errorf("update: %s returned HTTP %d", url, res.StatusCode)
 	}
 
+	// A ~7 MB download on campus wifi is long enough that silence reads as a hang.
+	// Terminal only: the automatic once-a-day check runs from a systemd trigger
+	// with no tty, and a percentage counter in journald is noise.
+	meter := newMeter(res.ContentLength)
+	defer meter.done()
+
 	// Download beside the target, never to a temp dir: a rename across
 	// filesystems is not atomic, and this one has to be.
 	tmp, err := os.CreateTemp(filepath.Dir(exe), ".bits-wifi-login-*")
@@ -105,7 +113,7 @@ func To(tag string) error {
 	}
 	defer os.Remove(tmp.Name()) // no-op once the rename has taken it
 
-	n, err := io.Copy(tmp, res.Body)
+	n, err := io.Copy(io.MultiWriter(tmp, meter), res.Body)
 	if err != nil {
 		tmp.Close()
 		return err
@@ -152,3 +160,49 @@ func StampPath() string {
 // Without it, `go build && ./bits-wifi-login` would silently overwrite whatever
 // was just compiled with whatever is on GitHub.
 var ErrDevBuild = errors.New("update: this is a local build, not a release")
+
+// meter draws download progress, or nothing at all when there is no terminal to
+// draw it on.
+type meter struct {
+	total   int64
+	written int64
+	show    bool
+	last    time.Time
+}
+
+func newMeter(total int64) *meter {
+	return &meter{total: total, show: term.IsTerminal(int(os.Stdout.Fd()))}
+}
+
+func (m *meter) Write(p []byte) (int, error) {
+	m.written += int64(len(p))
+
+	// Throttled: io.Copy hands over 32 KiB at a time, so an unthrottled meter
+	// would redraw a couple of hundred times for one download.
+	if m.show && time.Since(m.last) > 100*time.Millisecond {
+		m.last = time.Now()
+		m.draw()
+	}
+
+	return len(p), nil
+}
+
+func (m *meter) draw() {
+	mb := float64(m.written) / (1 << 20)
+
+	// Content-Length is missing often enough to matter, and a percentage of an
+	// unknown total is worse than no percentage.
+	if m.total <= 0 {
+		fmt.Printf("\r  %.1f MB", mb)
+		return
+	}
+
+	fmt.Printf("\r  %.0f%%  %.1f/%.1f MB",
+		100*float64(m.written)/float64(m.total), mb, float64(m.total)/(1<<20))
+}
+
+func (m *meter) done() {
+	if m.show {
+		fmt.Print("\r\033[K")
+	}
+}

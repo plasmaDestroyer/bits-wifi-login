@@ -38,7 +38,10 @@ echo ""
 
 echo "[1/2] Downloading..."
 mkdir -p "$INSTALL_DIR"
-curl -fsSL -o "$BIN" "$BIN_URL"
+# --progress-bar, not -s: this is ~7 MB and silence for the length of a download
+# on campus wifi reads as a hang. -f still fails the script on an HTTP error, and
+# the bar goes to stderr so it cannot end up inside the file.
+curl -f -L --progress-bar -o "$BIN" "$BIN_URL"
 chmod +x "$BIN"
 
 echo "[2/2] Setting up..."

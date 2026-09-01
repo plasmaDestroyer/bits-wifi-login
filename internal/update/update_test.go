@@ -155,3 +155,32 @@ func TestReplace(t *testing.T) {
 		t.Errorf("binary contains %q after replace, want %q", got, "new")
 	}
 }
+
+// The meter must not change what gets written — it sits in an io.MultiWriter in
+// front of the file being installed over the running binary.
+func TestMeterPassesBytesThrough(t *testing.T) {
+	m := newMeter(100)
+	m.show = false // no terminal in tests, and no output wanted either way
+
+	n, err := m.Write([]byte("hello"))
+	if err != nil || n != 5 {
+		t.Fatalf("Write() = (%d, %v), want (5, nil)", n, err)
+	}
+
+	m.Write([]byte("world"))
+	if m.written != 10 {
+		t.Errorf("written = %d, want 10", m.written)
+	}
+}
+
+// A percentage of an unknown total is worse than no percentage, and servers omit
+// Content-Length often enough to matter.
+func TestMeterSurvivesAnUnknownTotal(t *testing.T) {
+	m := newMeter(-1)
+	m.show = false
+
+	if _, err := m.Write([]byte("data")); err != nil {
+		t.Fatalf("Write() = %v with no Content-Length", err)
+	}
+	m.done() // must not panic
+}
