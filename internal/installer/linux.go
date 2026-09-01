@@ -3,6 +3,7 @@
 package installer
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/plasmaDestroyer/bits-wifi-login/internal/portal"
 )
@@ -163,8 +165,23 @@ func calibrateConnectivity() {
 		return
 	}
 
-	state, _ := runOut("nmcli", "networking", "connectivity", "check")
-	if strings.TrimSpace(state) == "full" {
+	// Bounded, because `connectivity check` forces NM to probe for real and a
+	// broken probe blocks until NM's own timeout — ~10s of an install spent
+	// waiting for an answer we are about to reject anyway.
+	//
+	// Slow IS the answer here. This trigger exists to notice a drop within one
+	// 20s interval; a check that cannot finish in a few seconds is useless for
+	// that even when it eventually says "full".
+	state, err := nmConnectivity(checkTimeout)
+	if err != nil {
+		_ = setConnectivityCheck(false)
+		fmt.Printf("⚠ NM's connectivity check did not answer within %s, so it is too slow to\n"+
+			"  detect a drop. Left off, so the periodic timer is the trigger.\n", checkTimeout)
+
+		return
+	}
+
+	if state == "full" {
 		fmt.Println("✓ NetworkManager connectivity checking enabled and verified.")
 		return
 	}
@@ -176,8 +193,30 @@ func calibrateConnectivity() {
 
 	fmt.Printf("⚠ NM reports %q while the network is working — a VPN is most likely\n"+
 		"  intercepting NM's probe. Left off, so the periodic timer is the trigger.\n"+
-		"  Re-run `bits-wifi-login install` if you change your VPN setup.\n",
-		strings.TrimSpace(state))
+		"  Re-run `bits-wifi-login install` if you change your VPN setup.\n", state)
+}
+
+// checkTimeout is generous for a probe that a working network answers in well
+// under a second, and short enough that a broken one does not stall the install.
+const checkTimeout = 4 * time.Second
+
+func nmConnectivity(limit time.Duration) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), limit)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "nmcli", "networking", "connectivity", "check")
+	// Killing the process is not enough to unblock Output(): anything that
+	// inherited its stdout keeps the pipe open and the read waits on that, not on
+	// the process. WaitDelay closes the pipes shortly after the kill so this
+	// cannot outlive its deadline no matter what nmcli left behind.
+	cmd.WaitDelay = time.Second
+
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+
+	return strings.TrimSpace(string(out)), nil
 }
 
 func setConnectivityCheck(on bool) error {

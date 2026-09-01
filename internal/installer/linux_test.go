@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The dispatcher runs as root and interpolates this path into a `su -c` string.
@@ -115,5 +116,25 @@ func stub(t *testing.T, dir, name, body string) {
 
 	if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0755); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// `connectivity check` forces NM to probe for real, and a probe that cannot get
+// out — the VPN case this calibration exists for — blocks until NM's own
+// timeout. That cost ~10s of a real install on 2026-09-01.
+func TestNMConnectivityGivesUpOnItsOwnDeadline(t *testing.T) {
+	dir := t.TempDir()
+	stub(t, dir, "nmcli", "#!/usr/bin/env bash\nsleep 30\necho full\n")
+	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
+
+	start := time.Now()
+	_, err := nmConnectivity(200 * time.Millisecond)
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Error("nmConnectivity() = nil error against a probe that never answers")
+	}
+	if elapsed > 2*time.Second {
+		t.Errorf("nmConnectivity() took %v, want it bounded by the deadline", elapsed)
 	}
 }
