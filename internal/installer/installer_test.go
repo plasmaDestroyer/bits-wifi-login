@@ -3,6 +3,7 @@ package installer
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -120,5 +121,63 @@ func TestSpinnerStops(t *testing.T) {
 	case <-done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("done() did not return; the animation goroutine was never joined")
+	}
+}
+
+// creds.conf must never exist in a half-written state: ensureCreds skips the
+// prompt whenever the file is present, so a truncated one is silently accepted
+// on every later run and the user is never asked again.
+func TestWriteCredsIsAtomic(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "creds.conf")
+
+	if err := writeCreds(path, creds.Creds{Username: "u", Password: "p"}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(got), "u") || !strings.Contains(string(got), "p") {
+		t.Errorf("creds.conf = %q, want the credentials", got)
+	}
+
+	// The mode carries the secret, so it has to survive the rename.
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0600 {
+		t.Errorf("creds.conf mode = %v, want 0600", info.Mode().Perm())
+	}
+
+	// No temp file may be left behind on the happy path.
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		names := []string{}
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		t.Errorf("directory holds %v, want only creds.conf", names)
+	}
+}
+
+// A failure must leave nothing behind, or the next run skips the prompt.
+func TestWriteCredsLeavesNothingOnFailure(t *testing.T) {
+	dir := t.TempDir()
+
+	// A path inside a directory that does not exist: CreateTemp fails outright.
+	err := writeCreds(filepath.Join(dir, "missing", "creds.conf"), creds.Creds{Username: "u", Password: "p"})
+	if err == nil {
+		t.Fatal("writeCreds() = nil for an unwritable path")
+	}
+
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 0 {
+		t.Errorf("directory is not empty after a failed write: %v", entries)
 	}
 }

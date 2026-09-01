@@ -159,6 +159,37 @@ func leftovers() string {
 	return b.String()
 }
 
+// writeCreds writes into a temporary file and renames it into place, so
+// creds.conf either does not exist or is complete. os.WriteFile creates the file
+// first and fills it after, so a process killed in between leaves a truncated
+// creds.conf behind — and because ensureCreds skips the prompt whenever the file
+// exists, that half-written file would be silently accepted on every later run.
+//
+// The temp file is created in the same directory, since a rename is only atomic
+// within one filesystem. os.CreateTemp already makes it 0600, which is the mode
+// creds.conf has to keep.
+func writeCreds(path string, c creds.Creds) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".creds-*")
+	if err != nil {
+		return fmt.Errorf("installer: writing %s: %w", path, err)
+	}
+	defer os.Remove(tmp.Name()) // no-op once the rename has taken it
+
+	if _, err := tmp.WriteString(creds.Format(c)); err != nil {
+		tmp.Close()
+		return fmt.Errorf("installer: writing %s: %w", path, err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("installer: writing %s: %w", path, err)
+	}
+
+	if err := os.Rename(tmp.Name(), path); err != nil {
+		return fmt.Errorf("installer: writing %s: %w", path, err)
+	}
+
+	return nil
+}
+
 func ensureCreds(path string) error {
 	if _, err := os.Stat(path); err == nil {
 		fmt.Println("✓ creds.conf already exists, skipping.")
@@ -172,8 +203,8 @@ func ensureCreds(path string) error {
 		return err
 	}
 
-	if err := os.WriteFile(path, []byte(creds.Format(c)), 0600); err != nil {
-		return fmt.Errorf("installer: writing %s: %w", path, err)
+	if err := writeCreds(path, c); err != nil {
+		return err
 	}
 
 	fmt.Println("✓ creds.conf created.")
