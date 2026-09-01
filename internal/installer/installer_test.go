@@ -107,7 +107,11 @@ func TestHiddenNote(t *testing.T) {
 		return
 	}
 
-	if !strings.Contains(got, "hidden") {
+	if !strings.Contains(got, "Nothing appears as you type") {
 		t.Errorf("hiddenNote() = %q on %s, want it to explain the silent prompt", got, runtime.GOOS)
+	}
+	// Its own line, so the prompt after it starts at the left margin.
+	if !strings.HasSuffix(got, "\n") {
+		t.Errorf("hiddenNote() = %q, want it to end the line", got)
 	}
 }

@@ -163,12 +163,14 @@ func leftovers() string {
 }
 
 // hiddenNote explains the silent password prompt where that is worth doing.
+// Its own line, not a parenthetical: inline, it pushed the prompt so far right
+// that the cursor landed near the edge of an 80-column terminal.
 func hiddenNote() string {
 	if runtime.GOOS == "linux" {
 		return ""
 	}
 
-	return " (hidden — nothing appears as you type, press Enter when done)"
+	return "  Nothing appears as you type — that is normal.\n"
 }
 
 func ensureCreds(path string) error {
@@ -208,7 +210,8 @@ func prompt() (creds.Creds, error) {
 	//
 	// Said on Windows and macOS only. Anyone installing this on Linux has met a
 	// silent password prompt before, and explaining it to them is noise.
-	fmt.Print("Enter your BITS password" + hiddenNote() + ": ")
+	fmt.Print(hiddenNote())
+	fmt.Print("Enter your BITS password: ")
 
 	password, err := term.ReadPassword(int(os.Stdin.Fd()))
 	fmt.Println()
