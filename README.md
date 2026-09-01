@@ -1,8 +1,8 @@
 # BITS Wifi Auto-Login
 
-Automatically logs you into the BITS Pilani Fortinet Captive Portal (`BITS-STUDENT` & `BITS-STAFF` Wi-Fi networks) in the background when your device connects to the network.
+Automatically logs you into the BITS Pilani Fortinet Captive Portal (`BITS-STUDENT` or `BITS-STAFF` Wi-Fi networks) in the background when your device connects to the network.
 
-It's a single small Go binary with no runtime dependencies — the installer downloads the prebuilt one for your platform and wires up your OS's native background triggers around it.
+It's a single small Go binary with no runtime dependencies - the installer downloads the prebuilt one for your platform and wires up your OS's native background triggers around it.
 
 ## ⚙️ Installation & Setup
 
@@ -10,14 +10,12 @@ It's a single small Go binary with no runtime dependencies — the installer dow
 ```bash
 curl -fsSL https://plasmaDestroyer.github.io/bits-wifi-login/install.sh | bash
 ```
-*Linux requires NetworkManager, and sets up a dispatcher hook plus a systemd service and timer. macOS gets a launchd agent that triggers on DNS/network changes (fires on most Wi-Fi connects but is not a precise trigger — the 5-minute periodic fallback is the reliable safety net).*
 
 ### 🪟 Windows
 Open PowerShell as Administrator and run:
 ```powershell
 irm https://plasmaDestroyer.github.io/bits-wifi-login/install.ps1 | iex
 ```
-*Registers scheduled tasks that trigger on network connect, on resume, on login, and every 5 minutes.*
 
 After installation, it will prompt you for your BITS Wifi username and password to create a `creds.conf` file, and set up all the background triggers for your OS. If you ever change your password or need to fix a typo, you can just edit that file directly.
 
@@ -28,11 +26,11 @@ After installation, it will prompt you for your BITS Wifi username and password 
 | 🐧 Linux / 🍎 macOS | `~/.local/share/bits-wifi-login/` |
 | 🪟 Windows | `%LOCALAPPDATA%\bits-wifi-login\` |
 
-The binary, `creds.conf` and — on Windows — `bits-wifi-login.log` all sit together in that one folder.
+The binary, `creds.conf` and - on Windows - `bits-wifi-login.log` all sit together in that one folder.
 
 You don't have to remember any of it, because installing puts `bits-wifi-login` on your PATH: on Windows by adding the folder to your user PATH, on Linux and macOS by symlinking it into `~/.local/bin`.
 
-On **Windows**, close the terminal you installed from and open a new one before using the name — a program can't change the environment of the shell that launched it, so that window will keep saying "not recognized" however long you wait. Linux and macOS need no such dance; the name works straight away, unless the installer tells you `~/.local/bin` isn't on your PATH (the macOS default), in which case it prints the one line to add.
+On **Windows**, close the terminal you installed from and open a new one before using the name - a program can't change the environment of the shell that launched it, so that window will keep saying "not recognized" however long you wait. Linux and macOS need no such dance; the name works straight away, unless the installer tells you `~/.local/bin` isn't on your PATH (the macOS default), in which case it prints the one line to add.
 
 Then, from anywhere:
 
@@ -62,7 +60,7 @@ That's it. From now on, whenever your device connects to `BITS-STUDENT` (or `BIT
 
 If something breaks (missing files, broken hooks, permission errors, or partial installs), just run **`bits-wifi-login install`** again. It re-registers every component, so it doubles as a repair command.
 
-To see what's happening, run it in the foreground — it prints each step:
+To see what's happening, run it in the foreground - it prints each step:
 
 ```bash
 bits-wifi-login
@@ -72,14 +70,11 @@ On **Windows** every run also appends a line to `bits-wifi-login.log` beside the
 
 ### Certificate errors
 
-Your credentials are sent to the portal over HTTPS with **TLS verification always on** — there is no
-flag to turn it off, by design. The portal's certificate is publicly trusted, so a verification
-failure means something is genuinely wrong with the connection, not with this tool. Report it rather
-than working around it.
+Your credentials are sent to the portal over HTTPS with **TLS verification always on** - there is no flag to turn it off, by design. The portal's certificate is publicly trusted, so a verification failure means something is genuinely wrong with the connection, not with this tool. Report it rather than working around it.
 
 ## 💡 Good to know
 
-*   **Linux:** Fully tested and works fine (I use Arch btw 😉).
+*   **Linux:** Fully tested and works great (I use Arch btw 😉).
 *   **macOS:** Should work well since it's essentially the same as linux.
 *   **Windows:** Added recently, it should work great, though I haven't used it much as compared to linux.
 *   **Issues?** If facing any issues, feel free to reach out to me or [open an issue on GitHub](https://github.com/plasmaDestroyer/bits-wifi-login/issues).
