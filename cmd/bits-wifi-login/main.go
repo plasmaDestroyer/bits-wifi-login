@@ -240,19 +240,52 @@ func watch(p *portal.Portal) {
 	log.Printf("expiry due %s, watching until %s",
 		deadline.Format(time.TimeOnly), giveUp.Format(time.TimeOnly))
 
-	for time.Now().Before(giveUp) {
-		time.Sleep(session.PollInterval)
-
-		if p.IsLoggedIn() {
-			continue
-		}
-
-		authenticate(p, "")
-
+	if watchLoop(giveUp, session.PollInterval, p.IsLoggedIn, func() bool { return authenticate(p, "") }) {
 		return
 	}
 
 	log.Print("expiry did not arrive within the grace period, leaving it to the periodic check.")
+}
+
+// confirmDrop is how many consecutive failed probes count as an expiry. One is
+// not enough. On 2026-09-04 a single probe failed at 04:40:30 because WARP's DNS
+// proxy timed out resolving the probe host, the network was demonstrably fine
+// three seconds later, and the session then really expired at 04:40:39 — nine
+// seconds after the miss that had already retired the watcher.
+const confirmDrop = 2
+
+// watchLoop polls until the session actually drops, and reports whether it was
+// caught. Split out of watch for the seam: the portal's fields are unexported,
+// so a real Portal cannot be pointed at a test server from this package.
+//
+// login returning false means the outage healed on its own. That is NOT a
+// reason to stop — the expiry this watcher was armed for has not happened yet,
+// and giving up on it leaves the 10-minute timer as the only recovery, which is
+// the whole thing anticipation exists to avoid.
+func watchLoop(giveUp time.Time, poll time.Duration, probe, login func() bool) bool {
+	misses := 0
+
+	for time.Now().Before(giveUp) {
+		time.Sleep(poll)
+
+		if probe() {
+			misses = 0
+
+			continue
+		}
+
+		if misses++; misses < confirmDrop {
+			continue
+		}
+
+		if login() {
+			return true
+		}
+
+		misses = 0
+	}
+
+	return false
 }
 
 // selfUpdate replaces this binary with the newest release. loud distinguishes
@@ -294,7 +327,11 @@ func selfUpdate(loud bool) error {
 	return nil
 }
 
-func authenticate(p *portal.Portal, ssid string) {
+// authenticate logs in, reporting whether a session was actually established.
+// False means the probe found the network healthy after all, which the watcher
+// needs to tell apart from success: one is done, the other is a false alarm it
+// must keep camping through.
+func authenticate(p *portal.Portal, ssid string) bool {
 	c, err := creds.Load(creds.DefaultPath())
 	if err != nil {
 		log.Fatal(err)
@@ -308,9 +345,15 @@ func authenticate(p *portal.Portal, ssid string) {
 	// so the reactive path is measured too — that is the path that runs when the
 	// watcher failed to arm, which is the case most worth knowing about.
 	if prev := session.Load(session.DefaultPath()); !prev.LoginAt.IsZero() {
-		log.Printf("expiry noticed %s after the predicted deadline of %s",
-			time.Since(prev.Deadline()).Round(time.Second),
-			prev.Deadline().Format(time.TimeOnly))
+		// Early is the normal case now that the deadline is anticipated, and
+		// "-18s after" is a worse way to say "18s before".
+		off, when := time.Since(prev.Deadline()).Round(time.Second), "after"
+		if off < 0 {
+			off, when = -off, "before"
+		}
+
+		log.Printf("expiry noticed %s %s the predicted deadline of %s",
+			off, when, prev.Deadline().Format(time.TimeOnly))
 	}
 
 	for attempt := 1; attempt <= attempts; attempt++ {
@@ -323,7 +366,7 @@ func authenticate(p *portal.Portal, ssid string) {
 			// attempts and do not exit non-zero over it.
 			log.Print("connectivity came back on its own, nothing to do.")
 
-			return
+			return false
 		}
 		if err != nil {
 			log.Print(err)
@@ -341,7 +384,7 @@ func authenticate(p *portal.Portal, ssid string) {
 				log.Printf("could not record the session deadline: %v", err)
 			}
 
-			return
+			return true
 		} else {
 			log.Print("portal accepted the login but there is still no connectivity.")
 		}
@@ -352,6 +395,8 @@ func authenticate(p *portal.Portal, ssid string) {
 	}
 
 	log.Fatal("all attempts failed.")
+
+	return false // unreachable; log.Fatal exits
 }
 
 // settled waits for the session to actually come up, returning the moment it
