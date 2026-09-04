@@ -162,3 +162,16 @@ func TestSummaryMatchesWhatIsActuallyEnabled(t *testing.T) {
 		}
 	}
 }
+
+// NM merges conf.d per key: overriding `uri` without `response` leaves the
+// distro's expected body in place, and NM then calls a good 204 a captive
+// portal. Empty response means "204 or no data" — what generate_204 sends.
+func TestConnectivityConfSetsResponseAlongsideURI(t *testing.T) {
+	if !strings.Contains(connectivityConf, "uri=") {
+		t.Fatal("connectivityConf no longer sets uri; this test needs rewriting")
+	}
+
+	if !strings.Contains(connectivityConf, "\nresponse=\n") {
+		t.Errorf("connectivityConf overrides uri without an empty response:\n%s", connectivityConf)
+	}
+}
