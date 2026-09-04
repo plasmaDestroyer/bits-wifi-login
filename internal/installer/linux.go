@@ -457,7 +457,18 @@ WantedBy=timers.target
 // wins, so calibrateConnectivity drives the D-Bus property and there is exactly
 // one lever. interval is the detection budget once it is on; NM's 300s default
 // would leave a dead session for five minutes.
+//
+// `response` MUST be set whenever `uri` is. conf.d merges per key, not per file,
+// so overriding only the uri leaves the distro's response in place — on Arch
+// that is the default "NetworkManager is online", the literal body of
+// ping.archlinux.org/nm-check.txt. generate_204 answers 204 with no body, NM
+// compares that against the expected text, and reports "portal" for a probe
+// that in fact succeeded. Empty means "204 or no data", which is exactly what
+// generate_204 is. This cost a week: calibrateConnectivity read the bogus
+// "portal" as a VPN eating the probe and disabled the connectivity-change
+// trigger, leaving the 10-minute timer as the only reactive path.
 const connectivityConf = `[connectivity]
 uri=http://connectivitycheck.gstatic.com/generate_204
+response=
 interval=20
 `
