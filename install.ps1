@@ -21,8 +21,13 @@ Write-Host ""
 
 Write-Host "[1/2] Downloading..." -ForegroundColor Cyan
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-Invoke-WebRequest -Uri $BinUrl -OutFile $Bin
-Unblock-File -Path $Bin
+# Windows will not overwrite a running .exe but will rename one, and a watcher
+# may be running it right now. The .old copy is cleared on the next run.
+Invoke-WebRequest -Uri $BinUrl -OutFile "$Bin.new"
+Unblock-File -Path "$Bin.new"
+Remove-Item "$Bin.old" -Force -ErrorAction SilentlyContinue
+if (Test-Path $Bin) { Move-Item $Bin "$Bin.old" -Force }
+Move-Item "$Bin.new" $Bin -Force
 
 Write-Host "[2/2] Setting up..." -ForegroundColor Cyan
 Write-Host ""
