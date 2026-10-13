@@ -3,9 +3,28 @@
 # that is not rebuilt is a commit that is not actually running. This is the
 # whole reason it is a hook: the gap between "committed" and "live" is invisible.
 #
+# Builds HEAD, not the working tree: a partial commit must not ship whatever
+# else happens to be lying around uncommitted.
+#
 # Not `bits-wifi-login install` — that needs sudo and would prompt in the middle
 # of a commit. Re-run it by hand when trigger definitions or paths change.
-go build -o bits-wifi-login ./cmd/bits-wifi-login || {
-    echo "post-commit: rebuild failed — the installed binary is now behind HEAD" >&2
+fail() {
+    echo "post-commit: $1 — the installed binary is now behind HEAD" >&2
     exit 0
 }
+
+tree=$(mktemp -d)
+trap 'git worktree remove --force "$tree" 2>/dev/null; rm -rf "$tree"' EXIT
+git worktree add -q --detach "$tree" HEAD || fail "worktree failed"
+
+(cd "$tree" && go build -ldflags "-s -w -X main.version=$(git describe --tags --always)-dev" \
+    -o "$OLDPWD/bits-wifi-login" ./cmd/bits-wifi-login) || fail "rebuild failed"
+
+# The copy the triggers run. Absent = never installed on this machine; nothing to do.
+live=$(readlink -f "$(command -v bits-wifi-login)" 2>/dev/null) || exit 0
+[ -n "$live" ] && [ "$live" != "$PWD/bits-wifi-login" ] || exit 0
+
+# Copy beside, then rename: a watcher may be executing the old file right now,
+# and overwriting a running binary in place fails with "text file busy".
+cp bits-wifi-login "$live.new" && mv -f "$live.new" "$live" || fail "install to $live failed"
+echo "post-commit: installed $("$live" version) to $live"
