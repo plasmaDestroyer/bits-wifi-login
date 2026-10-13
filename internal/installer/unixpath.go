@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
+	"slices"
 )
 
 // ~/.local/bin, not a shell rc file. Editing .bashrc means guessing which of
@@ -88,11 +88,5 @@ func pathNote() string {
 }
 
 func onPath(dir string) bool {
-	for _, entry := range strings.Split(os.Getenv("PATH"), string(os.PathListSeparator)) {
-		if entry == dir {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(filepath.SplitList(os.Getenv("PATH")), dir)
 }
