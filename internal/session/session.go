@@ -12,9 +12,11 @@ import (
 const (
 	// Must be >= the coarsest trigger interval, or no trigger lands inside it and
 	// the watcher never runs.
-	WatchWindow  = 10 * time.Minute
-	WatchGrace   = 5 * time.Minute
-	PollInterval = 2 * time.Second
+	WatchWindow = 10 * time.Minute
+	WatchGrace  = 5 * time.Minute
+	// Every poll is dead time added to the recovery, and it is only paid inside
+	// the watch window: ~1800 tiny requests a day, against 2s of outage per drop.
+	PollInterval = 500 * time.Millisecond
 	// Rejects an implausibly short observation: two logins close together are a
 	// failed attempt, and one such sample would pin the estimate low for good.
 	MinLifetime = 30 * time.Minute

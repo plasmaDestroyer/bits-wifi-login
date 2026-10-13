@@ -15,11 +15,13 @@ const (
 )
 
 // Bounds the probe alone, not the login round trips, which need the full 10s.
-// A live network answers in <100ms, so this is only ever paid when the session
-// has just dropped and the request hangs — twice per recovery. Cutting early is
-// safe: the login that follows gets a 204 and returns ErrAlreadyOnline.
+// A live network answers in <100ms (84ms measured on campus), so this is only
+// ever paid when the session has just dropped and the request hangs — up to
+// three times per recovery, which is why it is 1s and not the 3s it once was.
+// Cutting early is safe: the login that follows gets a 204 and returns
+// ErrAlreadyOnline.
 // A var, not a const, so tests need not sleep for real seconds.
-var probeTimeout = 3 * time.Second
+var probeTimeout = time.Second
 
 type Portal struct {
 	noFollow        *http.Client
