@@ -7,6 +7,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -290,5 +291,39 @@ func TestProbeGivesUpOnItsOwnDeadline(t *testing.T) {
 	// deadline was ignored and the recovery is slow again.
 	if elapsed > time.Second {
 		t.Errorf("IsLoggedIn() took %v, want it bounded by probeTimeout", elapsed)
+	}
+}
+
+// A failed probe must not inherit the previous probe's 204. On 2026-10-13 the
+// probe hung at 11:16:43, Login re-probed into the same hang, found the 204 left
+// over from the last healthy probe, and reported "came back on its own" — five
+// seconds of dead network spent on a session that had in fact expired.
+func TestLoginIgnoresAStale204AfterAFailedProbe(t *testing.T) {
+	blocked := make(chan struct{})
+	var sick atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !sick.Load() {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		<-blocked
+	}))
+	defer srv.Close()
+	defer close(blocked)
+
+	restore := probeTimeout
+	probeTimeout = 50 * time.Millisecond
+	defer func() { probeTimeout = restore }()
+
+	p := Portal{noFollow: srv.Client(), follow: srv.Client(), connectivityURL: srv.URL, baseURL: srv.URL}
+	if !p.IsLoggedIn() {
+		t.Fatal("IsLoggedIn() = false against a 204")
+	}
+
+	sick.Store(true)
+	p.IsLoggedIn() // the miss that sends the watcher into Login
+
+	if _, err := p.Login(creds.Creds{Username: "u", Password: "p"}); errors.Is(err, ErrAlreadyOnline) {
+		t.Error("Login() = ErrAlreadyOnline after a probe that never answered")
 	}
 }

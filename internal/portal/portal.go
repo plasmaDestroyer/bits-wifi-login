@@ -63,25 +63,26 @@ func New() *Portal {
 // flow needs the same response twice, and asking twice paid a second round trip
 // exactly when someone is sitting at a dead network waiting to be let back on.
 func (p *Portal) probe() (int, error) {
+	// Cleared up front so a failed probe reports nothing rather than the last
+	// good one: a leftover 204 made Login call a real expiry "already online".
+	p.interceptStatus, p.interceptBody, p.interceptLocation, p.fresh = 0, nil, "", false
+
 	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.connectivityURL, nil)
 	if err != nil {
-		p.fresh = false
 		return 0, err
 	}
 
 	res, err := p.noFollow.Do(req)
 	if err != nil {
-		p.fresh = false
 		return 0, err
 	}
 	defer res.Body.Close()
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		p.fresh = false
 		return 0, err
 	}
 
