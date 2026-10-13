@@ -351,12 +351,12 @@ func authenticate(p *portal.Portal, ssid string) bool {
 // does rather than always paying the worst case.
 func settled(p *portal.Portal) bool {
 	for waited := time.Duration(0); waited < settleTimeout; waited += settleStep {
-		time.Sleep(settleStep)
-
 		if p.IsLoggedIn() {
 			return true
 		}
+
+		time.Sleep(settleStep)
 	}
 
-	return false
+	return p.IsLoggedIn() // the last sleep still deserves its probe
 }
