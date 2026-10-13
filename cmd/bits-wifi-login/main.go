@@ -21,7 +21,6 @@ import (
 	"github.com/plasmaDestroyer/bits-wifi-login/internal/portal"
 	"github.com/plasmaDestroyer/bits-wifi-login/internal/runlog"
 	"github.com/plasmaDestroyer/bits-wifi-login/internal/session"
-	"github.com/plasmaDestroyer/bits-wifi-login/internal/update"
 	"github.com/plasmaDestroyer/bits-wifi-login/internal/wifi"
 )
 
@@ -62,8 +61,6 @@ func main() {
 		fatal(installer.Uninstall())
 	case "status":
 		status()
-	case "update":
-		fatal(selfUpdate(true))
 	case "version", "-v", "--version":
 		fmt.Println(version)
 	case "-h", "--help", "help":
@@ -83,7 +80,6 @@ func usage(w *os.File) {
   bits-wifi-login uninstall    remove the background triggers
   bits-wifi-login status       where everything lives and whether it is working
   bits-wifi-login version      which release this binary is
-  bits-wifi-login update       replace this binary with the newest release
 `)
 }
 
@@ -197,15 +193,6 @@ func login() {
 			log.Print("already authenticated, nothing to do.")
 		}
 
-		// Only from here: we are demonstrably online, and nothing about an update
-		// is worth delaying a login for. Errors are logged, never fatal — a
-		// failed update must not turn a working trigger into a failing one.
-		if update.Due(update.StampPath()) {
-			if err := selfUpdate(false); err != nil && !errors.Is(err, update.ErrDevBuild) {
-				log.Printf("update check failed: %v", err)
-			}
-		}
-
 		watch(p)
 		return
 	}
@@ -286,45 +273,6 @@ func watchLoop(giveUp time.Time, poll time.Duration, probe, login func() bool) b
 	}
 
 	return false
-}
-
-// selfUpdate replaces this binary with the newest release. loud distinguishes
-// the `update` subcommand, where silence would look broken, from the automatic
-// check, which should say nothing unless it actually did something.
-//
-// The triggers bake an absolute path to this file, so replacing it in place is
-// the only kind of update that takes effect. What they do NOT pick up is a
-// change to the trigger definitions themselves, which needs sudo — hence the
-// closing line rather than a silent success.
-func selfUpdate(loud bool) error {
-	// A local build has no release to compare against, and replacing it with one
-	// would silently discard whatever was just compiled.
-	if version == "dev" {
-		return update.ErrDevBuild
-	}
-
-	latest, err := update.Latest()
-	if err != nil {
-		return err
-	}
-
-	if latest == version {
-		if loud {
-			log.Printf("already on the newest release (%s).", version)
-		}
-
-		return nil
-	}
-
-	log.Printf("updating from %s to %s...", version, latest)
-
-	if err := update.To(latest); err != nil {
-		return err
-	}
-
-	log.Printf("updated to %s. Re-run `bits-wifi-login install` if the triggers changed.", latest)
-
-	return nil
 }
 
 // authenticate logs in, reporting whether a session was actually established.

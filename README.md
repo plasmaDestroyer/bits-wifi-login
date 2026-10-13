@@ -40,6 +40,10 @@ bits-wifi-login status
 
 prints the exact paths, whether each background trigger is still registered, what network you're on, whether you're authenticated right now, and what the last run did.
 
+### ⬆️ Updating
+
+Re-run the install command at the top of this page. It fetches the newest release over the old binary and re-registers the triggers, which is what a version bump usually needs anyway. Your `creds.conf` is left alone.
+
 ### 🗑️ Removing it
 
 ```bash
