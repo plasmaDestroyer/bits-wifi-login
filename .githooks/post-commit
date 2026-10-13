@@ -13,6 +13,9 @@ fail() {
     exit 0
 }
 
+# Git exports the main index to hooks; left set, `worktree add` writes into it.
+unset GIT_INDEX_FILE
+
 tree=$(mktemp -d)
 trap 'git worktree remove --force "$tree" 2>/dev/null; rm -rf "$tree"' EXIT
 git worktree add -q --detach "$tree" HEAD || fail "worktree failed"
