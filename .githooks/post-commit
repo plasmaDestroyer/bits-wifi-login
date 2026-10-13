@@ -6,8 +6,10 @@
 # Builds HEAD, not the working tree: a partial commit must not ship whatever
 # else happens to be lying around uncommitted.
 #
-# Not `bits-wifi-login install` — that needs sudo and would prompt in the middle
-# of a commit. Re-run it by hand when trigger definitions or paths change.
+# Then re-runs `install` from the live copy, so trigger definitions ship with the
+# commit too. It bakes in the path of the binary that runs it — hence the live
+# copy, never ./bits-wifi-login. It needs sudo: skipped with no terminal to
+# prompt on and no cached sudo, rather than failing the commit.
 fail() {
     echo "post-commit: $1 — the installed binary is now behind HEAD" >&2
     exit 0
@@ -31,3 +33,9 @@ live=$(readlink -f "$(command -v bits-wifi-login)" 2>/dev/null) || exit 0
 # and overwriting a running binary in place fails with "text file busy".
 cp bits-wifi-login "$live.new" && mv -f "$live.new" "$live" || fail "install to $live failed"
 echo "post-commit: installed $("$live" version) to $live"
+
+if [ -t 2 ] || sudo -n true 2>/dev/null; then
+    "$live" install || fail "install failed"
+else
+    echo "post-commit: no terminal for sudo, skipped install — run: $live install" >&2
+fi
