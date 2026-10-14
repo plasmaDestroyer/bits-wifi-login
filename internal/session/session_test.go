@@ -10,7 +10,7 @@ import (
 
 func TestShouldWatch(t *testing.T) {
 	now := time.Date(2026, 8, 12, 12, 0, 0, 0, time.UTC)
-	// Deadline is now + 1h, so the window opens at 12:50 and the grace ends at 13:05.
+	// Deadline 13:00: window opens 12:50, grace ends 13:05.
 	s := Session{LoginAt: now.Add(-3 * time.Hour), Timeout: 4 * time.Hour}
 
 	cases := []struct {
@@ -35,8 +35,6 @@ func TestShouldWatch(t *testing.T) {
 	}
 }
 
-// An unknown deadline must never trigger a watch — a zero session is what a
-// missing or corrupt state file loads as.
 func TestShouldWatchZeroSession(t *testing.T) {
 	for _, s := range []Session{
 		{},
@@ -63,7 +61,7 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	}
 
 	if runtime.GOOS == "windows" {
-		return // no unix mode bits; see the comment on creds.Load
+		return // no unix mode bits. See the comment on creds.Load
 	}
 	info, err := os.Stat(path)
 	if err != nil {
@@ -74,8 +72,6 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	}
 }
 
-// Load is the one thing in this package that absolutely cannot fail: a bad state
-// file must degrade to "deadline unknown", never block the login path.
 func TestLoadSurvivesGarbage(t *testing.T) {
 	dir := t.TempDir()
 
@@ -118,8 +114,6 @@ func TestLockIsExclusive(t *testing.T) {
 	}
 }
 
-// A killed watcher leaves its lock behind. If that were honoured forever, one
-// SIGKILL would disable the feature until somebody noticed a stray file.
 func TestLockIgnoresStale(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "session.lock")
 
@@ -136,10 +130,6 @@ func TestLockIgnoresStale(t *testing.T) {
 	}
 }
 
-// The regression this whole package exists for: the portal advertises 14400s and
-// a session measured on 2026-08-28 outlived that by hours, so a believed number
-// produced a wrong deadline and a watcher that polled through it for nothing.
-// Observe must take its answer from what actually happened.
 func TestObserve(t *testing.T) {
 	base := time.Date(2026, 8, 27, 15, 24, 13, 0, time.UTC)
 	day := 24*time.Hour + 3*time.Minute
@@ -151,8 +141,6 @@ func TestObserve(t *testing.T) {
 		want time.Duration
 	}{
 		{
-			// Nothing to compare against, so no guess. An unknown deadline
-			// disables the watch, which is correct; a wrong one wastes polling.
 			name: "first ever login measures nothing",
 			prev: Session{},
 			at:   base,
@@ -165,8 +153,6 @@ func TestObserve(t *testing.T) {
 			want: day,
 		},
 		{
-			// A suspended laptop or a missed drop can only stretch the gap, so a
-			// longer observation is noise and must not replace a tighter one.
 			name: "a longer observation never loosens the estimate",
 			prev: Session{LoginAt: base, Timeout: day},
 			at:   base.Add(3 * day),
@@ -179,8 +165,6 @@ func TestObserve(t *testing.T) {
 			want: 5 * time.Hour,
 		},
 		{
-			// Two logins in quick succession are a failed attempt or a flapping
-			// link. Accepting one would pin the estimate near zero for good.
 			name: "an implausibly short observation is rejected",
 			prev: Session{LoginAt: base, Timeout: day},
 			at:   base.Add(4 * time.Minute),
@@ -208,7 +192,6 @@ func TestObserve(t *testing.T) {
 	}
 }
 
-// A zero timeout must disable the watch rather than arm it at the login instant.
 func TestObserveWithoutAnEstimateDisablesTheWatch(t *testing.T) {
 	at := time.Date(2026, 8, 28, 15, 30, 11, 0, time.UTC)
 

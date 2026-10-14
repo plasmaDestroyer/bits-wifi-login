@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# What CI runs, minus the cross-compiles — those are in pre-push, where the
-# extra two seconds are paid once per batch instead of once per commit.
+# CI checks minus cross-compiles (those live in pre-push).
 set -e
 
 unformatted=$(gofmt -l .)

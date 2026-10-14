@@ -6,9 +6,7 @@ import (
 	"testing"
 )
 
-// The portal sets a session cookie on GET /fgtauth?<magic> (issued by follow) and
-// expects it back on the credential POST (issued by noFollow). Separate jars would
-// silently drop it and the login would be rejected.
+// Separate jars silently drop the fgtauth cookie and the login gets rejected.
 func TestNewSharesCookieJar(t *testing.T) {
 	var gotCookie string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -14,31 +14,20 @@ import (
 	"github.com/plasmaDestroyer/bits-wifi-login/internal/creds"
 )
 
-// Session is what the login learns. No token is kept: the expiry is anticipated
-// by watching the clock, never by asking the portal, which answers nothing about
-// a live session anyway.
-//
-// No timeout either. The keepalive page advertises 14400s and that number is not
-// the session lifetime — measured 2026-08-28, a session outlived it by hours —
-// so reading it produced a confidently wrong deadline. How long a session lasts
-// is measured from observed drops instead; see session.Observe.
+// Session is what the login learns. No timeout: the keepalive page advertises
+// 14400s and it is lying. The real lifetime is measured, see session.Observe.
 type Session struct {
 	LoginAt time.Time
 }
 
-// ErrAlreadyOnline means the probe answered 204 on the way to logging in, so
-// there is nothing to log into. It happens when a transient outage heals between
-// IsLoggedIn's probe failing and the token probe being made — seen twice on
-// 2026-08-31, where a network hiccup at 11:37 and 12:46 sent a healthy machine
-// through four login attempts and a fatal "all attempts failed".
+// ErrAlreadyOnline means the probe answered 204 on the way to logging in: a
+// blip healed by itself, so there is nothing to log into.
 var ErrAlreadyOnline = errors.New("portal: already online")
 
 func (p *Portal) Login(c creds.Creds) (Session, error) {
 	magic, which, ok := p.magicToken()
 
 	if !ok {
-		// Check this before reporting a missing token: a 204 is not a portal we
-		// failed to parse, it is no portal at all.
 		if p.interceptStatus == http.StatusNoContent {
 			return Session{}, ErrAlreadyOnline
 		}
@@ -46,10 +35,7 @@ func (p *Portal) Login(c creds.Creds) (Session, error) {
 		return Session{}, noMagicError(p.interceptBody, p.interceptStatus, p.interceptLocation)
 	}
 
-	// Which strategy fired is the evidence for pruning the other two — log it
-	// before anything downstream can fail. The token value itself is not logged:
-	// these logs land in journald and world-readable dispatcher logs, and the
-	// strategy name is the only part worth keeping.
+	// Strategy name only, never the token: these logs are world-readable.
 	log.Printf("magic via %s", which)
 
 	authUrl := p.baseURL + "/fgtauth?" + magic
@@ -91,16 +77,12 @@ func (p *Portal) Login(c creds.Creds) (Session, error) {
 	}
 	defer res.Body.Close()
 
-	// The keepalive GET above is what actually activates the session, so it has to
-	// happen; its body has nothing worth reading.
+	// The keepalive GET is what activates the session. The body is junk.
 	return Session{LoginAt: time.Now()}, nil
 }
 
-// rejectionError distinguishes bad credentials from a portal response we don't
-// understand, and saves the body so a changed portal can be diagnosed later.
-// The dump is meant to be attached to bug reports, so the password is scrubbed
-// out of it first — a Fortinet failure page re-renders the login form and there
-// is no guarantee it does not echo what was submitted.
+// rejectionError tells bad credentials from a response we don't understand and
+// dumps the body for bug reports, password scrubbed in case the page echoes it.
 func rejectionError(body []byte, status int, password string) error {
 	reason := fmt.Sprintf("unexpected portal response (HTTP %d)", status)
 	if rejectRe.Match(body) {
@@ -123,9 +105,8 @@ func redact(body []byte, password string) []byte {
 	return bytes.ReplaceAll(body, []byte(password), []byte("[REDACTED]"))
 }
 
-// noMagicError saves whatever the portal actually answered the probe with. Two
-// wrong guesses about that response have already cost a day of failed logins;
-// the next failure should hand over evidence, not a shrug.
+// noMagicError dumps what the probe actually got, so the next failure comes
+// with evidence instead of a shrug.
 func noMagicError(interceptBody []byte, status int, location string) error {
 	if len(interceptBody) == 0 {
 		return fmt.Errorf("portal: no magic token found — the probe returned HTTP %d with an empty body and Location %q. If a VPN is up (CloudflareWARP, Tailscale) it is tunnelling the probe past the captive portal; exclude %s from it", status, location, connectivityURL)
@@ -140,7 +121,6 @@ func noMagicError(interceptBody []byte, status int, location string) error {
 }
 
 func dumpBody(body []byte) (string, error) {
-	// os.CreateTemp already creates with 0600.
 	f, err := os.CreateTemp("", "fortinet_error_*.html")
 	if err != nil {
 		return "", err
@@ -155,9 +135,7 @@ func dumpBody(body []byte) (string, error) {
 }
 
 func (p *Portal) magicToken() (string, string, bool) {
-	// IsLoggedIn just made this exact request, so reuse its answer instead of
-	// paying for it twice. Consumed either way: on a retry the previous body is
-	// known-useless, and a stale one would only reproduce the same failure.
+	// Reuse IsLoggedIn's probe once. Retries need a fresh one.
 	if !p.fresh {
 		if _, err := p.probe(); err != nil {
 			return "", "", false
@@ -169,10 +147,8 @@ func (p *Portal) magicToken() (string, string, bool) {
 		return token, "redirect", true
 	}
 
-	// The intercept page itself, which is what the BITS portal actually serves:
-	// it answers the probe with a body pointing at /fgtauth?<magic> rather than a
-	// Location header. Confirmed 2026-08-08 — a build that only looked at the
-	// header and at GET / failed every single attempt for a whole day.
+	// THE live path: BITS answers the probe with a body pointing at
+	// /fgtauth?<magic>, no Location header. Never prune this (2026-08-08).
 	body := string(p.interceptBody)
 
 	if token, ok := magicFromRedirect(body); ok {
@@ -182,11 +158,6 @@ func (p *Portal) magicToken() (string, string, bool) {
 		return token, "body-form", true
 	}
 
-	// There used to be a fourth strategy here that fetched the portal root and
-	// looked for a form in it. It was never a net: the real portal empty-replies
-	// on GET /, which is exactly why the body strategy had to exist, so it could
-	// not have matched — and unlike the three above, which are regex checks on a
-	// response already in hand, it paid a whole HTTP request to find that out.
-	// Every login on record fired "body".
+	// No GET / fallback: the real portal empty-replies there.
 	return "", "", false
 }

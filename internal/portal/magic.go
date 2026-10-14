@@ -4,8 +4,7 @@ import (
 	"regexp"
 )
 
-// Separator confirmed `?` against the live portal on 2026-08-08: the magic is a
-// bare query string, not a key=value pair.
+// Bare query strings, not key=value (live portal, 2026-08-08):
 //
 //	https://fw.bits-pilani.ac.in:8090/fgtauth?034ea02187c4c8d7
 //	https://fw.bits-pilani.ac.in:8090/keepalive?0e050d0a05030901

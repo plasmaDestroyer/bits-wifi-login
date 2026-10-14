@@ -1,9 +1,6 @@
 package installer
 
-// Task XML generation. Deliberately NOT build-tagged, even though only the
-// Windows installer uses it: it is pure string building, and keeping it
-// buildable everywhere means the tests run in CI on Linux instead of only when
-// somebody happens to run `go test` on a Windows box.
+// Task XML generation. Untagged on purpose so its tests run in CI everywhere.
 
 import (
 	"encoding/xml"
@@ -18,10 +15,8 @@ const (
 	eventTask = "BITS-WiFi-Login-OnConnect"
 )
 
-// The two ways a task can carry the user's identity. S4U ("run whether the user
-// is logged on or not") runs outside the desktop session, which is what keeps
-// the login invisible; InteractiveToken needs a session and therefore gets a
-// console window. Only the fallback in install() should ever pick the latter.
+// S4U runs outside the desktop session, so no console window. InteractiveToken
+// gets one, and is only install()'s fallback.
 const (
 	logonS4U         = "S4U"
 	logonInteractive = "InteractiveToken"
@@ -32,10 +27,8 @@ func startBoundary() string {
 	return time.Now().Add(time.Minute).Format("2006-01-02T15:04:05")
 }
 
-// utf16LE encodes with a BOM, which is what schtasks /xml documents, what every
-// Windows build accepts, and what the task document's own declaration says it
-// is. Current builds also tolerate UTF-8 — that was measured, not assumed — but
-// tolerance is not a contract, and writing what we declare costs six lines.
+// utf16LE encodes with a BOM: what schtasks /xml documents and what the XML
+// declaration claims. UTF-8 works today too, but that is tolerance, not a contract.
 func utf16LE(s string) []byte {
 	encoded := utf16.Encode([]rune(s))
 
@@ -55,18 +48,10 @@ func xmlEscape(s string) string {
 	return b.String()
 }
 
-// Run the binary itself, with no shell in the way.
-//
-// This used to be `cmd.exe /c "<exe> >> <log> 2>&1"`, because a scheduled task
-// discards stdout and Windows has no journald to catch it. That wrapper is
-// exactly what flashed a console window on screen every five minutes: cmd.exe
-// always gets a console, and <Hidden> only hides the task from the Task
-// Scheduler list, never the window. The binary keeps its own log now
-// (internal/runlog), so the shell has nothing left to do.
-//
-// <Command> is a path, not a command line, so a path with spaces needs no
-// quoting here — the old doubled-quote idiom was a property of cmd, not of the
-// task schema.
+// Run the binary itself, no shell: a cmd.exe wrapper flashed a console window
+// every five minutes (<Hidden> hides the task from the Scheduler list, not the
+// window). The binary logs on its own (internal/runlog).
+// <Command> is a path, not a command line, so spaces need no quoting.
 func action(exe string) string {
 	return fmt.Sprintf(`  <Actions Context="Author">
     <Exec>
@@ -75,10 +60,8 @@ func action(exe string) string {
   </Actions>`, xmlEscape(exe))
 }
 
-// ExecutionTimeLimit has to outlast a watch: a run landing near the portal's
-// expiry camps on it and polls for up to WatchWindow+WatchGrace. At the old PT2M
-// the task registered fine and the watcher was killed a couple of minutes in,
-// which is invisible except as an expiry that nothing anticipated.
+// ExecutionTimeLimit must outlast WatchWindow+WatchGrace, or Task Scheduler
+// quietly kills the watcher mid-camp.
 const taskSettings = `  <Settings>
     <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
     <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
@@ -101,9 +84,8 @@ func principals(user, logon string) string {
   </Principals>`, xmlEscape(user), logon)
 }
 
-// 5 minutes rather than Linux's 10: the NetworkProfile event only fires on
-// connect, so like macOS this poll is the only thing that notices the portal
-// session expiring on its own.
+// 5 min, not Linux's 10: NetworkProfile only fires on connect, so this poll is
+// the only thing that notices an expiry.
 func mainTaskXML(user, exe, logon string) string {
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">

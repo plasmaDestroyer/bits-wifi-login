@@ -1,5 +1,5 @@
-// Package session remembers when the portal let us in, so the next expiry can be
-// anticipated instead of waited for.
+// Package session remembers when the portal let us in, so the next expiry can
+// be seen coming.
 package session
 
 import (
@@ -10,20 +10,16 @@ import (
 )
 
 const (
-	// Must be >= the coarsest trigger interval, or no trigger lands inside it and
-	// the watcher never runs.
+	// Must be >= the coarsest trigger interval, or the watcher never arms.
 	WatchWindow = 10 * time.Minute
 	WatchGrace  = 5 * time.Minute
-	// Every poll is dead time added to the recovery, and it is only paid inside
-	// the watch window: ~1800 tiny requests a day, against 2s of outage per drop.
+	// Only paid inside the watch window.
 	PollInterval = 500 * time.Millisecond
-	// Rejects an implausibly short observation: two logins close together are a
-	// failed attempt, and one such sample would pin the estimate low for good.
+	// Two logins this close are a failed attempt, not a session lifetime.
 	MinLifetime = 30 * time.Minute
 )
 
-// Deliberately no token: the watcher never talks to the portal about an existing
-// session, so a stale state file cannot disconnect a healthy one.
+// No token on purpose: a stale state file can never log out a healthy session.
 type Session struct {
 	LoginAt time.Time     `json:"login_at"`
 	Timeout time.Duration `json:"timeout"`
@@ -33,13 +29,9 @@ func (s Session) Deadline() time.Time {
 	return s.LoginAt.Add(s.Timeout)
 }
 
-// Observe folds a fresh login into what we know about how long a session lasts.
-// Measured, never believed from the portal, whose advertised 14400s is not the
-// lifetime (it is 12h — see CLAUDE.md).
-//
-// The estimate is the SMALLEST plausible gap ever seen, because every error
-// source runs one way: suspend, an undetected drop and a coarse trigger interval
-// can only stretch an observed gap, so the minimum converges from above.
+// Observe folds a fresh login into the measured session lifetime (12h, the
+// portal's advertised 14400s is wrong). Keeps the SMALLEST plausible gap:
+// suspend, a missed drop or a coarse trigger can only stretch a gap.
 func Observe(prev Session, loginAt time.Time) Session {
 	next := Session{LoginAt: loginAt, Timeout: prev.Timeout}
 
@@ -55,9 +47,7 @@ func Observe(prev Session, loginAt time.Time) Session {
 	return next
 }
 
-// ShouldWatch reports whether now is close enough to the predicted expiry to be
-// worth camping on. Pure, so the window arithmetic is testable without clocks or
-// sockets.
+// ShouldWatch reports whether now is close enough to the expiry to camp on it.
 func ShouldWatch(now time.Time, s Session) bool {
 	if s.LoginAt.IsZero() || s.Timeout <= 0 {
 		return false
@@ -68,7 +58,7 @@ func ShouldWatch(now time.Time, s Session) bool {
 	return !now.Before(deadline.Add(-WatchWindow)) && now.Before(deadline.Add(WatchGrace))
 }
 
-// Beside the binary, like creds.conf: a trigger has no useful working directory.
+// Beside the binary, like creds.conf.
 func DefaultPath() string {
 	exe, err := os.Executable()
 	if err != nil {
@@ -102,10 +92,9 @@ func Save(path string, s Session) error {
 	return os.WriteFile(path, content, 0600)
 }
 
-// Lock stops two watchers camping at once: the timer and the NM dispatcher
-// invoke the binary independently, so systemd's one-instance-per-unit does not
-// cover it. A lock older than a whole watch can only be a killed process and is
-// taken over, or one SIGKILL would wedge the feature permanently.
+// Lock stops the timer and the NM dispatcher camping at once (systemd only
+// serialises its own unit). A lock older than a whole watch belongs to a
+// killed process and gets taken over.
 func Lock(path string) (release func(), ok bool) {
 	if info, err := os.Stat(path); err == nil && time.Since(info.ModTime()) < WatchWindow+WatchGrace {
 		return nil, false

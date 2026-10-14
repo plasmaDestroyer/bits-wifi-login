@@ -19,13 +19,9 @@ import (
 	"github.com/plasmaDestroyer/bits-wifi-login/internal/portal"
 )
 
-// sudoWrite writes into /etc without the whole program running as root —
-// creds.conf must stay owned by the user who actually logs in.
-//
-// `install -m`, not `tee` then `chmod`: one privileged process per file instead
-// of two, and the file is never briefly on disk with the wrong mode. It also
-// halves the number of sudo invocations an install makes, which matters because
-// each one is a chance for the sudo timestamp to have expired mid-run.
+// sudoWrite writes into /etc without running the whole program as root, so
+// creds.conf stays user-owned. `install -m`, not tee+chmod: one sudo per file
+// and never a moment with the wrong mode.
 func sudoWrite(path, content, mode string) error {
 	cmd := exec.Command("sudo", "install", "-m", mode, "/dev/stdin", path)
 	cmd.Stdin = strings.NewReader(content)
@@ -53,9 +49,8 @@ var units = []string{
 	"bits-wifi-login-resume.service",
 }
 
-// The dispatcher script runs as root and embeds this path in a `su -c` string,
-// and systemd splits ExecStart on whitespace. Both make an unusual path a real
-// problem, so refuse it up front with an actionable message.
+// The path lands in a root-run `su -c` string and in ExecStart, which systemd
+// splits on whitespace. Refuse odd paths instead of quoting for both.
 var unsafePath = regexp.MustCompile("[\\s\"'`$\\\\;&|<>()\n]")
 
 func preflight(exe string) error {
@@ -93,8 +88,8 @@ func install(exe string) error {
 
 	fmt.Println("Installing background triggers (sudo may prompt)...")
 
-	// Prime sudo before touching /etc: sudoWrite pipes content on stdin, so sudo
-	// needs /dev/tty for the password. Failing here beats a partial install.
+	// Prime sudo first: sudoWrite uses stdin for content, so the password needs
+	// /dev/tty. Failing here beats a half install.
 	if err := run("sudo", "-v"); err != nil {
 		return errors.New("installer: sudo could not authenticate — run this straight from a terminal (it cannot prompt for a password through a pipe or an editor console)")
 	}
@@ -110,10 +105,7 @@ func install(exe string) error {
 	if err := run("sudo", "systemctl", "reload", "NetworkManager"); err != nil {
 		fmt.Println("⚠ Could not reload NetworkManager — connectivity checking starts at next restart.")
 	}
-	// NM's probe can block for seconds and nothing below this line depends on it,
-	// so let it run while the systemd units go in. On a machine where the probe
-	// is broken — the case that made an install sit silent for ten seconds — the
-	// whole systemd half now happens inside that wait.
+	// NM's probe can block for seconds. Let it run while the units go in.
 	verdict := make(chan string, 1)
 	go func() { verdict <- calibrateConnectivity() }()
 
@@ -142,19 +134,14 @@ func install(exe string) error {
 		return err
 	}
 
-	// restart, not `enable --now`. On a re-install the timer is normally already
-	// active, and `start` is a no-op on an active unit — so it would keep its old
-	// in-memory schedule and any change to the timer file would silently not
-	// apply. Worse, a timer parked in `active (elapsed)` stays parked: only a
-	// restart recomputes the next elapse. This is what makes install a repair.
+	// restart, NOT `enable --now`: `start` is a no-op on an active timer, so it
+	// keeps its old schedule, and one parked in `active (elapsed)` stays parked.
 	if err := run("sudo", "systemctl", "restart", "bits-wifi-login.timer"); err != nil {
 		return err
 	}
 	fmt.Println("✓ Timer enabled and started.")
 
-	// Usually already waiting by now, in which case this prints immediately. Only
-	// spin if NM is genuinely still thinking, so the animation appears exactly
-	// when there would otherwise be silence.
+	// Only spin if NM is still thinking.
 	select {
 	case line := <-verdict:
 		fmt.Println(line)
@@ -165,16 +152,10 @@ func install(exe string) error {
 	return nil
 }
 
-// Under a VPN, NM's own probe often cannot get out: confirmed 2026-08-28, curl
-// got a clean 204 while NM's check said "limited". Forcing it on there is worse
-// than off — NM reports a working network as broken to every app, and, stuck in
-// one wrong state, can never emit the *transition* this trigger needs.
-//
-// So do not assume: enable, ask NM what it sees, keep it only if NM agrees with
-// a probe that just succeeded. A VPN enabled later invalidates that, which is
-// why triggers() re-reads the live verdict and re-running install is the repair.
-// Returns the line to print rather than printing it, because it runs
-// concurrently with the rest of the install and output has to stay ordered.
+// Under a VPN, NM's own probe often can't get out (2026-08-28): NM then calls a
+// working network broken and, stuck there, never fires the transition this
+// trigger needs. So enable, ask NM, and keep it only if NM agrees with a probe
+// that just worked. Returns its line instead of printing: it runs concurrently.
 func calibrateConnectivity() string {
 	if !portal.New().IsLoggedIn() {
 		return "⚠ Not online, so NM's connectivity check could not be verified — left as it was."
@@ -184,13 +165,8 @@ func calibrateConnectivity() string {
 		return "⚠ Could not enable NM connectivity checking — the periodic timer is the only trigger."
 	}
 
-	// Bounded, because `connectivity check` forces NM to probe for real and a
-	// broken probe blocks until NM's own timeout — ~10s of an install spent
-	// waiting for an answer we are about to reject anyway.
-	//
-	// Slow IS the answer here. This trigger exists to notice a drop within one
-	// 20s interval; a check that cannot finish in a few seconds is useless for
-	// that even when it eventually says "full".
+	// Bounded: a broken probe blocks ~10s. Slow IS the answer, too: a check
+	// that can't finish in seconds is useless for 20s drop detection.
 	state, err := nmConnectivity(checkTimeout)
 	if err != nil {
 		_ = setConnectivityCheck(false)
@@ -212,8 +188,6 @@ func calibrateConnectivity() string {
 		"  Re-run `bits-wifi-login install` if you change your VPN setup.", state)
 }
 
-// checkTimeout is generous for a probe that a working network answers in well
-// under a second, and short enough that a broken one does not stall the install.
 const checkTimeout = 4 * time.Second
 
 func nmConnectivity(limit time.Duration) (string, error) {
@@ -221,10 +195,7 @@ func nmConnectivity(limit time.Duration) (string, error) {
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "nmcli", "networking", "connectivity", "check")
-	// Killing the process is not enough to unblock Output(): anything that
-	// inherited its stdout keeps the pipe open and the read waits on that, not on
-	// the process. WaitDelay closes the pipes shortly after the kill so this
-	// cannot outlive its deadline no matter what nmcli left behind.
+	// Killing nmcli doesn't unblock Output() if a child kept the pipe open.
 	cmd.WaitDelay = time.Second
 
 	out, err := cmd.Output()
@@ -245,10 +216,8 @@ func setConnectivityCheck(on bool) error {
 func uninstall() (int, error) {
 	removed := 0
 
-	// Disable unconditionally so stale symlinks go too; a unit that was never
-	// installed just reports a failure we can ignore. run, not runOut, all the
-	// way down here: sudo may still need a terminal to prompt on, and swallowing
-	// its stderr would swallow the password prompt with it.
+	// Disable unconditionally so stale symlinks go too. run, not runOut: don't
+	// swallow sudo's password prompt.
 	for _, unit := range units {
 		if err := run("sudo", "systemctl", "disable", "--now", unit); err != nil {
 			fmt.Printf("• Not found or already removed: %s\n", unit)
@@ -259,10 +228,7 @@ func uninstall() (int, error) {
 	}
 
 	for _, path := range []string{timerPath, servicePath, resumePath, dispatcherPath, connectivityPath} {
-		// rm -f cannot tell us whether there was anything there, and reporting a
-		// removal that did not happen is how uninstall ends up claiming it cleaned
-		// a machine it never touched. Everything here is world-readable, so the
-		// existence check needs no root of its own.
+		// rm -f can't say whether anything was there. Don't claim removals.
 		if _, err := os.Stat(path); err != nil {
 			fmt.Printf("• Not found: %s\n", path)
 			continue
@@ -276,8 +242,6 @@ func uninstall() (int, error) {
 		fmt.Printf("✓ Removed %s\n", path)
 	}
 
-	// Nothing was there, so there is nothing to reload — and no reason to make a
-	// second uninstall ask for a root password to do it.
 	if removed == 0 {
 		return 0, nil
 	}
@@ -285,13 +249,8 @@ func uninstall() (int, error) {
 	return removed, run("sudo", "systemctl", "daemon-reload")
 }
 
-// is-enabled and a stat, not systemctl status: neither needs root, and status
-// would report "inactive" for a oneshot service that is working perfectly.
-//
-// is-enabled exits non-zero for "disabled", which is the *correct* state for
-// bits-wifi-login.service — install only enables the timer and the resume unit,
-// and the timer is what pulls the service in. Judge on the word, not the exit
-// status, or a healthy install reports its own service missing.
+// is-enabled, not status: a healthy oneshot reads "inactive". And judge the
+// word, not the exit code: "disabled" is correct for the timer-driven service.
 func triggers() []Trigger {
 	found := make([]Trigger, 0, len(units)+2)
 
@@ -306,12 +265,8 @@ func triggers() []Trigger {
 		found = append(found, Trigger{Name: filepath.Base(path), Registered: err == nil})
 	}
 
-	// The connectivity file existing proves nothing — NM can be told at runtime
-	// to stop checking, and then it reads the file, reports its uri back, and
-	// never probes. That is invisible from the filesystem and it is what turned
-	// connectivity-change into a dead trigger for weeks. Ask NM itself.
-	// The live verdict matters as much as the on/off bit: a VPN enabled after
-	// install leaves this on but wrong, and a stuck NM fires nothing.
+	// Ask NM itself: the conf file can exist while checking is off at runtime,
+	// and a VPN added after install leaves it on but stuck.
 	name := "NM connectivity checking (the connectivity-change trigger)"
 	if verdict, err := runOut("nmcli", "networking", "connectivity"); err == nil {
 		name = fmt.Sprintf("%s — NM currently reports %q", name, strings.TrimSpace(verdict))
@@ -330,10 +285,7 @@ func connectivityCheckEnabled() bool {
 	return err == nil && strings.TrimSpace(out) == "b true"
 }
 
-// The connectivity-change line is conditional, because calibration may have just
-// turned that trigger off — listing it anyway told the user they had drop
-// detection they did not have, and made the 10-minute timer look like a backup
-// when it was in fact the only thing running.
+// connectivity-change is listed only if calibration kept it on.
 func summary() string {
 	drop := "    - The moment NM notices connectivity dropped (connectivity-change)\n"
 	timer := "    - Every 10 minutes (systemd timer, persistent across sleep)\n"
@@ -356,20 +308,12 @@ func summary() string {
 		"    Re-run `bits-wifi-login install` if triggers or permissions break.\n"
 }
 
-// The dispatcher waits for the network to actually answer before logging in —
-// NM reports "up" well before the captive portal is reachable.
+// NM says "up" before the portal answers, so the dispatcher waits first.
+// `connectivity-change` fires the moment NM's probe flips to "portal".
 //
-// `connectivity-change` is what closes the silent-drop gap: NM's own periodic
-// connectivity probe flips to "portal" the moment the session dies, and that
-// fires here immediately instead of waiting for the next timer tick.
-//
-// The readiness check is "did anything answer at all", i.e. curl's exit status,
-// NOT the HTTP status. It used to wait for a 204 or a 302, which is exactly
-// backwards: an intercepted probe answers 200 with the fgtauth page in the body
-// (no Location header — see internal/portal), so in the one situation this hook
-// exists for, the loop could never match. It burned its ten tries and exited
-// without logging in, which is the 30-60s of dead network after a session
-// expiry. 204 means already online and 302 was never observed.
+// Readiness = curl's exit status, NOT the HTTP status: an intercepted probe
+// answers 200 with the fgtauth page, so waiting for 204/302 never matched in
+// the one state worth logging in from.
 func dispatcher(exe, username, logPath string) string {
 	return fmt.Sprintf(`#!/usr/bin/env bash
 CURRENT_SSID=$(nmcli -t -f active,ssid dev wifi 2>/dev/null | grep '^yes' | cut -d: -f2)
@@ -386,9 +330,8 @@ fi
 `, exe, logPath, username)
 }
 
-// TimeoutStartSec=0 because a run near the expiry camps on it for minutes.
-// oneshot already defaults to no timeout; stating it stops a distro-level
-// DefaultTimeoutStartSec from silently capping the watcher.
+// TimeoutStartSec=0: the watcher camps for minutes, and a distro
+// DefaultTimeoutStartSec would cut it off.
 func serviceUnit(exe, username string) string {
 	return fmt.Sprintf(`[Unit]
 Description=BITS WiFi Fortinet Login
@@ -406,8 +349,7 @@ WantedBy=multi-user.target
 `, username, exe)
 }
 
-// ExecStartPre gives the Wi-Fi radio time to reassociate after a resume;
-// without it the login fires before there is any SSID to detect.
+// ExecStartPre: let Wi-Fi reassociate after resume, or there's no SSID yet.
 func resumeUnit(exe, username string) string {
 	return fmt.Sprintf(`[Unit]
 Description=BITS WiFi Login after resume
@@ -432,14 +374,9 @@ WantedBy=suspend.target hibernate.target hybrid-sleep.target suspend-then-hibern
 `, username, exe)
 }
 
-// A fallback only: the session expires on a fixed wall-clock instant, which a
-// bare poll aliases against — measured 2026-08-29, this tick fired 12s before
-// the drop and the next chance was 10 minutes later. The watcher is what
-// actually catches expiries.
-//
-// OnCalendar, not OnUnitActiveSec: the latter re-arms against the last *service*
-// activation, so a restart can evaluate every trigger into the past and park the
-// unit in `active (elapsed)` forever. `systemctl list-timers` shows NEXT as `-`.
+// Fallback only. The watcher catches expiries. OnCalendar, NOT
+// OnUnitActiveSec: that one re-arms off the last service run and can park the
+// unit in `active (elapsed)` forever (list-timers shows NEXT as `-`).
 const timerUnit = `[Unit]
 Description=BITS WiFi Login periodic check
 
@@ -452,21 +389,13 @@ Persistent=true
 WantedBy=timers.target
 `
 
-// `enabled` is deliberately NOT set here: a runtime override in
-// /var/lib/NetworkManager/NetworkManager-intern.conf is read after conf.d and
-// wins, so calibrateConnectivity drives the D-Bus property and there is exactly
-// one lever. interval is the detection budget once it is on; NM's 300s default
-// would leave a dead session for five minutes.
+// No `enabled` here: NM's runtime override wins over conf.d, so
+// calibrateConnectivity flips it over D-Bus instead. interval=20 is the whole
+// detection budget (NM's default 300s = five dead minutes).
 //
-// `response` MUST be set whenever `uri` is. conf.d merges per key, not per file,
-// so overriding only the uri leaves the distro's response in place — on Arch
-// that is the default "NetworkManager is online", the literal body of
-// ping.archlinux.org/nm-check.txt. generate_204 answers 204 with no body, NM
-// compares that against the expected text, and reports "portal" for a probe
-// that in fact succeeded. Empty means "204 or no data", which is exactly what
-// generate_204 is. This cost a week: calibrateConnectivity read the bogus
-// "portal" as a VPN eating the probe and disabled the connectivity-change
-// trigger, leaving the 10-minute timer as the only reactive path.
+// `response` MUST be set whenever `uri` is. conf.d merges per key, so the
+// distro's expected text (Arch: "NetworkManager is online") survives, NM calls
+// generate_204's empty 204 a "portal", and calibration kills the trigger.
 const connectivityConf = `[connectivity]
 uri=http://connectivitycheck.gstatic.com/generate_204
 response=

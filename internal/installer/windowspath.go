@@ -12,12 +12,8 @@ import (
 	"golang.org/x/sys/windows/registry"
 )
 
-// HKCU\Environment is the per-user PATH: no elevation needed, and no way to
-// damage the machine-wide one next to it.
-//
-// Not setx. setx would do this in a single line and silently truncate the
-// value at 1024 characters on the way, which is the classic way to destroy
-// somebody's PATH. Not the process environment either — that dies with us.
+// HKCU\Environment is the per-user PATH: no elevation needed. Not setx, which
+// silently truncates at 1024 chars, the classic way to wreck someone's PATH.
 const envKey = `Environment`
 
 func link(exe string) (bool, error) {
@@ -43,8 +39,7 @@ func link(exe string) (bool, error) {
 		updated = current + ";" + dir
 	}
 
-	// Preserve the type. A user PATH is normally REG_EXPAND_SZ and often holds
-	// %USERPROFILE%; rewriting it as a plain string would freeze those.
+	// Keep REG_EXPAND_SZ, or %USERPROFILE% and friends stop expanding.
 	if kind == registry.SZ {
 		err = key.SetStringValue("Path", updated)
 	} else {
@@ -59,12 +54,8 @@ func link(exe string) (bool, error) {
 	return true, nil
 }
 
-// pathNote goes under the commands in the install summary, because that is the
-// moment someone is about to type one. Say to close the terminal, not merely to
-// open a new one: a program cannot write into the environment of the shell that
-// launched it — the child gets a copy at creation — so this window will keep
-// answering "not recognized" whatever the registry now says, and the obvious
-// next move from there is to retry in the same window.
+// pathNote says to close the terminal, not just open another: the shell that
+// ran install keeps its old PATH no matter what the registry says.
 func pathNote() string {
 	return "\n  Note: close this terminal and open a new one before running these —\n" +
 		"  the PATH change cannot reach a shell that is already open.\n"
@@ -120,8 +111,7 @@ func listed(path, dir string) bool {
 	return false
 }
 
-// Windows paths are case-insensitive, and a PATH entry may or may not carry a
-// trailing separator or be wrapped in quotes.
+// Case-insensitive, and entries may carry a trailing separator or quotes.
 func samePath(a, b string) bool {
 	clean := func(s string) string {
 		s = strings.TrimSpace(s)
@@ -133,13 +123,8 @@ func samePath(a, b string) bool {
 	return clean(a) != "" && clean(a) == clean(b)
 }
 
-// announce tells the desktop the environment changed. Without this the new PATH
-// only reaches processes started after the next sign-in: Explorer caches the
-// environment it hands to everything it launches, so even a freshly opened
-// terminal would inherit the old one. With it, opening a new terminal is enough.
-//
-// Best effort — the PATH is already written, and a broadcast that fails costs a
-// sign-in, not the install.
+// announce tells Explorer the environment changed, or even new terminals get
+// the old PATH until next sign-in. Best effort.
 func announce() {
 	const (
 		hwndBroadcast   = 0xFFFF

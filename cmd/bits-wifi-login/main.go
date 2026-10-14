@@ -1,9 +1,6 @@
-// Command bits-wifi-login authenticates against the BITS Pilani Fortinet captive
-// portal. With no arguments it is meant to be fired by a background trigger
-// (systemd timer, launchd agent, scheduled task) and exits 0 whenever there is
-// nothing to do. `install` and `uninstall` manage those triggers, and `status`
-// reports on them for the times when a silent background tool is
-// indistinguishable from a broken one.
+// Command bits-wifi-login logs into the BITS Pilani Fortinet captive portal.
+// With no arguments it is what the background triggers run, and exits 0 when
+// there is nothing to do.
 package main
 
 import (
@@ -25,26 +22,20 @@ import (
 )
 
 const (
-	// The portal drops connections mid-flow ("EOF" on the fgtauth GET or the
-	// credential POST) often enough that two tries 3s apart burned out in six
-	// seconds and left the network dead until the next 10-minute tick. Backed
-	// off instead: 3s, 6s, 12s, ~21s of trying.
+	// The portal EOFs mid-flow often enough that two quick tries burned out
+	// before it recovered. Backed off instead: 3s, 6s, 12s.
 	attempts = 4
-	// The portal needs a moment before the session is live. Polled, not slept:
-	// this delay is paid on every login.
+	// The session takes a moment to go live. Polled, not slept.
 	settleTimeout = 3 * time.Second
 	settleStep    = 250 * time.Millisecond
 	retryDelay    = 3 * time.Second
 )
 
 // version is stamped by the release build (-ldflags -X main.version=<tag>).
-// "dev" for anything built locally, which is the honest answer: a local build
-// has no release to be.
 var version = "dev"
 
 func main() {
-	// Date included: the dispatcher log is an append-only file read days later,
-	// and bare clock times there are ambiguous exactly when it matters.
+	// Dated: these logs get read days later.
 	log.SetFlags(log.Ldate | log.Ltime)
 
 	var command string
@@ -89,10 +80,6 @@ func fatal(err error) {
 	}
 }
 
-// status answers the questions a background tool cannot answer by running:
-// where it put itself, whether the triggers are still registered, and whether
-// the last one that fired did anything. Without it the only evidence the tool
-// exists is the absence of a captive portal.
 func status() {
 	fmt.Println("bits-wifi-login " + version)
 
@@ -152,23 +139,17 @@ func authentication() string {
 }
 
 func login() {
-	// Where the output goes decides how much of it there is, so settle that
-	// before anything can fail and want to report itself.
 	sink := runlog.Open()
 	if sink != nil {
 		defer sink.Close()
 
 		log.SetOutput(io.MultiWriter(os.Stderr, sink))
-		log.SetFlags(log.Ldate | log.Ltime) // a file outlives the day a time-only stamp assumes
+		log.SetFlags(log.Ldate | log.Ltime)
 	}
 
-	// The triggers fire every few minutes and almost always find nothing to do,
-	// so the progress chatter is for humans watching a live run only. An outcome
-	// line is different: where there is a log file it is the only evidence the
-	// run happened at all, so every run leaves exactly one.
-	//
-	// stderr, not stdout — that is where the log package writes, so that is the
-	// stream whose reader decides whether anyone is watching.
+	// Progress chatter is for a human watching. A log file gets exactly one
+	// outcome line per run, since that is the only proof the run happened.
+	// stderr because that is where log writes.
 	interactive := term.IsTerminal(int(os.Stderr.Fd()))
 	verbose := interactive || sink != nil
 
@@ -200,11 +181,8 @@ func login() {
 	authenticate(p, ssid)
 }
 
-// watch camps on a session about to expire. The portal drops us on a fixed
-// timer, so it is the one network event that can be seen coming.
-//
-// Best-effort throughout: missing state, a lock held elsewhere or a deadline
-// that never arrives all just return, and the reactive path handles it.
+// watch camps on a session about to expire. Best-effort: anything odd just
+// returns and the reactive triggers pick it up.
 func watch(p *portal.Portal) {
 	s := session.Load(session.DefaultPath())
 
@@ -234,21 +212,15 @@ func watch(p *portal.Portal) {
 	log.Print("expiry did not arrive within the grace period, leaving it to the periodic check.")
 }
 
-// confirmDrop is how many consecutive failed probes count as an expiry. One is
-// not enough. On 2026-09-04 a single probe failed at 04:40:30 because WARP's DNS
-// proxy timed out resolving the probe host, the network was demonstrably fine
-// three seconds later, and the session then really expired at 04:40:39 — nine
-// seconds after the miss that had already retired the watcher.
+// confirmDrop consecutive failed probes count as an expiry. One is not enough:
+// on 2026-09-04 a single WARP DNS timeout retired the watcher nine seconds
+// before the real expiry.
 const confirmDrop = 2
 
-// watchLoop polls until the session actually drops, and reports whether it was
-// caught. Split out of watch for the seam: the portal's fields are unexported,
-// so a real Portal cannot be pointed at a test server from this package.
+// watchLoop polls until the session drops and reports whether it caught it.
 //
-// login returning false means the outage healed on its own. That is NOT a
-// reason to stop — the expiry this watcher was armed for has not happened yet,
-// and giving up on it leaves the 10-minute timer as the only recovery, which is
-// the whole thing anticipation exists to avoid.
+// login returning false means the outage healed on its own. Keep camping: the
+// expiry this watcher was armed for has not happened yet.
 func watchLoop(giveUp time.Time, poll time.Duration, probe, login func() bool) bool {
 	misses := 0
 
@@ -275,10 +247,8 @@ func watchLoop(giveUp time.Time, poll time.Duration, probe, login func() bool) b
 	return false
 }
 
-// authenticate logs in, reporting whether a session was actually established.
-// False means the probe found the network healthy after all, which the watcher
-// needs to tell apart from success: one is done, the other is a false alarm it
-// must keep camping through.
+// authenticate logs in. False means the network turned out healthy after all,
+// which the watcher treats as a false alarm, not success.
 func authenticate(p *portal.Portal, ssid string) bool {
 	c, err := creds.Load(creds.DefaultPath())
 	if err != nil {
@@ -289,12 +259,8 @@ func authenticate(p *portal.Portal, ssid string) bool {
 		log.Printf("not logged in. Authenticating to %s...", ssid)
 	}
 
-	// How far the portal's clock ran from ours. Logged here rather than in watch()
-	// so the reactive path is measured too — that is the path that runs when the
-	// watcher failed to arm, which is the case most worth knowing about.
+	// Logged here, not in watch, so the reactive path gets measured too.
 	if prev := session.Load(session.DefaultPath()); !prev.LoginAt.IsZero() {
-		// Early is the normal case now that the deadline is anticipated, and
-		// "-18s after" is a worse way to say "18s before".
 		off, when := time.Since(prev.Deadline()).Round(time.Second), "after"
 		if off < 0 {
 			off, when = -off, "before"
@@ -309,9 +275,6 @@ func authenticate(p *portal.Portal, ssid string) bool {
 
 		s, err := p.Login(c)
 		if errors.Is(err, portal.ErrAlreadyOnline) {
-			// The outage healed by itself between the two probes. Nothing was
-			// wrong and nothing needs doing, so do not burn the remaining
-			// attempts and do not exit non-zero over it.
 			log.Print("connectivity came back on its own, nothing to do.")
 
 			return false
@@ -344,11 +307,9 @@ func authenticate(p *portal.Portal, ssid string) bool {
 
 	log.Fatal("all attempts failed.")
 
-	return false // unreachable; log.Fatal exits
+	return false
 }
 
-// settled waits for the session to actually come up, returning the moment it
-// does rather than always paying the worst case.
 func settled(p *portal.Portal) bool {
 	for waited := time.Duration(0); waited < settleTimeout; waited += settleStep {
 		if p.IsLoggedIn() {
@@ -358,5 +319,5 @@ func settled(p *portal.Portal) bool {
 		time.Sleep(settleStep)
 	}
 
-	return p.IsLoggedIn() // the last sleep still deserves its probe
+	return p.IsLoggedIn()
 }

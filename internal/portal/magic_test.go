@@ -6,9 +6,7 @@ import (
 	"testing"
 )
 
-// TestFixtures runs the extractors against captured portal HTML rather than the
-// hand-written snippets above — the snippets pin the regex, these pin the shapes
-// the real portal has actually served.
+// TestFixtures runs the extractors against real captured portal HTML.
 func TestFixtures(t *testing.T) {
 	cases := []struct {
 		file      string
@@ -16,13 +14,10 @@ func TestFixtures(t *testing.T) {
 		wantToken string
 		wantOK    bool
 	}{
-		// Captured from the real BITS portal on 2026-08-08 (token replaced) — the
-		// page a browser actually lands on.
 		{"portal_form_real.html", magicFromForm, "a1b2c3d4e5f60718", true},
 		{"portal_form.html", magicFromForm, "deadbeef12345678", true},
-		// The real keepalive window also links `logout?<same-token>`, which sits
-		// above the keepalive URL in the page — matching that instead would log
-		// the user straight back out.
+		// The page links logout?<same-token> above the keepalive URL. Grabbing
+		// that one signs the user straight back out.
 		{"keepalive_real.html", keepaliveFromBody, "0f0e0d0c0b0a0908", true},
 		{"login_success.html", keepaliveFromBody, "cafebabe87654321", true},
 		{"login_failure.html", keepaliveFromBody, "", false},
@@ -43,8 +38,6 @@ func TestFixtures(t *testing.T) {
 	}
 }
 
-// The failure page must also be recognised as a credential rejection, not as an
-// unexpected response.
 func TestFixtureLoginFailureIsCredentialRejection(t *testing.T) {
 	body, err := os.ReadFile(filepath.Join("testdata", "login_failure.html"))
 	if err != nil {

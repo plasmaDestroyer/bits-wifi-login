@@ -1,9 +1,5 @@
 #!/usr/bin/env bash
-# BITS WiFi Login - bootstrap installer (Linux and macOS)
-# Usage: curl -fsSL https://plasmaDestroyer.github.io/bits-wifi-login/install.sh | bash
-#
-# This only fetches the binary. Everything else — credentials, background
-# triggers, uninstall — lives in `bits-wifi-login install`.
+# Bootstrap: fetch the binary, let `bits-wifi-login install` do the rest.
 
 set -e
 
@@ -38,17 +34,13 @@ echo ""
 
 echo "[1/2] Downloading..."
 mkdir -p "$INSTALL_DIR"
-# --progress-bar, not -s: this is ~7 MB and silence for the length of a download
-# on campus wifi reads as a hang. -f still fails the script on an HTTP error, and
-# the bar goes to stderr so it cannot end up inside the file.
-# Into a side file, then renamed over: re-running this is the update path, and a
-# watcher may be executing the old binary - writing into it fails with ETXTBSY.
+# Progress bar: ~7 MB of silence on campus wifi reads as a hang.
+# Side file + rename: a watcher may be running the old binary (ETXTBSY).
 curl -f -L --progress-bar -o "$BIN.new" "$BIN_URL"
 chmod +x "$BIN.new"
 mv -f "$BIN.new" "$BIN"
 
 echo "[2/2] Setting up..."
 echo ""
-# `curl | bash` leaves stdin pointing at this script, so the credential prompt
-# has to be handed the terminal explicitly.
+# `curl | bash` owns stdin, so hand the prompt the terminal.
 exec "$BIN" install </dev/tty

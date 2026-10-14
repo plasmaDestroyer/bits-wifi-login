@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-// The encoding is load-bearing: the wrong bytes get "the task file is invalid"
-// out of schtasks with no hint as to why.
 func TestUTF16LE(t *testing.T) {
 	got := utf16LE("A<")
 
@@ -24,7 +22,7 @@ func TestUTF16LE(t *testing.T) {
 }
 
 func TestUTF16LEHandlesNonASCII(t *testing.T) {
-	// A user name with an accent, and an emoji that needs a surrogate pair.
+	// An accent, and an emoji that needs a surrogate pair.
 	for _, s := range []string{"José", "task 🎉"} {
 		got := utf16LE(s)
 
@@ -44,14 +42,11 @@ func taskDocs(logon string) map[string]string {
 	}
 }
 
-// A malformed task document is rejected by schtasks with an unhelpful error, so
-// prove both documents parse before they ever reach it.
 func TestTaskXMLIsWellFormed(t *testing.T) {
 	for name, doc := range taskDocs(logonS4U) {
 		t.Run(name, func(t *testing.T) {
 			dec := xml.NewDecoder(strings.NewReader(doc))
-			// The declaration says UTF-16 but the Go string is UTF-8; the bytes are
-			// transcoded only at write time, so pass the reader through untouched.
+			// Still UTF-8 here. Transcoding happens at write time.
 			dec.CharsetReader = func(_ string, r io.Reader) (io.Reader, error) { return r, nil }
 
 			for {
@@ -67,7 +62,6 @@ func TestTaskXMLIsWellFormed(t *testing.T) {
 	}
 }
 
-// A domain\user containing & or < must not break the document.
 func TestTaskXMLEscapesUser(t *testing.T) {
 	doc := mainTaskXML(`DOM&AIN\a<b`, `C:\x.exe`, logonS4U)
 
@@ -91,8 +85,6 @@ func TestTaskXMLEscapesUser(t *testing.T) {
 	}
 }
 
-// A shell in the action means a console window on screen every five minutes.
-// Nothing may creep back between the scheduler and the binary.
 func TestActionRunsTheBinaryDirectly(t *testing.T) {
 	got := action(`C:\Program Files\bits-wifi-login.exe`)
 
@@ -106,8 +98,6 @@ func TestActionRunsTheBinaryDirectly(t *testing.T) {
 	if strings.Contains(got, "<Arguments>") {
 		t.Errorf("the binary takes no arguments from the scheduler:\n%s", got)
 	}
-	// <Command> is a path, not a command line: quoting it would look for a
-	// binary whose name literally starts with a quote.
 	if strings.Contains(command(t, got), `"`) {
 		t.Errorf("the command path is quoted:\n%s", got)
 	}
@@ -128,8 +118,6 @@ func command(t *testing.T, action string) string {
 	return cmd
 }
 
-// S4U is the whole reason the window is gone; a task written with the
-// interactive logon type shows one again.
 func TestTaskXMLCarriesTheLogonType(t *testing.T) {
 	for _, logon := range []string{logonS4U, logonInteractive} {
 		for name, doc := range taskDocs(logon) {
@@ -140,8 +128,7 @@ func TestTaskXMLCarriesTheLogonType(t *testing.T) {
 	}
 }
 
-// StartBoundary must be in the future; Task Scheduler silently refuses a
-// TimeTrigger whose boundary has already passed.
+// Task Scheduler silently refuses a TimeTrigger whose boundary has passed.
 func TestStartBoundaryFormat(t *testing.T) {
 	got := startBoundary()
 
@@ -154,7 +141,6 @@ func TestStartBoundaryFormat(t *testing.T) {
 }
 
 func TestTaskNamesAreStable(t *testing.T) {
-	// uninstall() deletes by these exact names, and so does the documentation.
 	if mainTask != "BITS-WiFi-Login" || eventTask != "BITS-WiFi-Login-OnConnect" {
 		t.Errorf("task names changed (%q, %q) — uninstall and the README refer to the old ones",
 			mainTask, eventTask)

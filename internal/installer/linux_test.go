@@ -13,7 +13,6 @@ import (
 	"time"
 )
 
-// The dispatcher runs as root and interpolates this path into a `su -c` string.
 func TestUnsafePath(t *testing.T) {
 	cases := []struct {
 		path   string
@@ -51,11 +50,7 @@ func TestDispatcherUsesTheUserStateDir(t *testing.T) {
 	}
 }
 
-// Actually runs the generated script. The readiness loop once gated on the probe
-// returning 204 or 302, so an intercepted probe — HTTP 200 with the fgtauth page
-// in the body, which is the only state worth logging in from — never satisfied
-// it. The hook spent its retries and exited having done nothing. Nothing caught
-// that because nothing had ever executed the script, only matched strings in it.
+// Executes the generated script: string-matching it is what let the 204/302 bug ship.
 func TestDispatcherLogsInWhenTheProbeIsIntercepted(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -65,7 +60,6 @@ func TestDispatcherLogsInWhenTheProbeIsIntercepted(t *testing.T) {
 	}{
 		// The case the hook exists for: Fortinet answers the probe itself.
 		{"intercepted", http.StatusOK, `<a href="/fgtauth?034ea02187c4c8d7">`, true},
-		// Already online. Running the binary is a cheap no-op, so don't gate on it.
 		{"online", http.StatusNoContent, "", true},
 		{"redirected", http.StatusFound, "", true},
 	}
@@ -85,7 +79,6 @@ func TestDispatcherLogsInWhenTheProbeIsIntercepted(t *testing.T) {
 			dir := t.TempDir()
 			marker := filepath.Join(dir, "logged-in")
 
-			// Stub out the two commands that need a real machine underneath.
 			stub(t, dir, "nmcli", "#!/bin/sh\necho yes:BITS-STAFF\n")
 			stub(t, dir, "su", "#!/bin/sh\ntouch "+marker+"\n")
 
@@ -119,9 +112,6 @@ func stub(t *testing.T, dir, name, body string) {
 	}
 }
 
-// `connectivity check` forces NM to probe for real, and a probe that cannot get
-// out — the VPN case this calibration exists for — blocks until NM's own
-// timeout. That cost ~10s of a real install on 2026-09-01.
 func TestNMConnectivityGivesUpOnItsOwnDeadline(t *testing.T) {
 	dir := t.TempDir()
 	stub(t, dir, "nmcli", "#!/usr/bin/env bash\nsleep 30\necho full\n")
@@ -139,9 +129,6 @@ func TestNMConnectivityGivesUpOnItsOwnDeadline(t *testing.T) {
 	}
 }
 
-// Listing connectivity-change as a live trigger when calibration has just turned
-// it off tells the user they have drop detection they do not have, and makes the
-// 10-minute timer look like a backup when it is the only thing running.
 func TestSummaryMatchesWhatIsActuallyEnabled(t *testing.T) {
 	got := summary()
 	on := connectivityCheckEnabled()
@@ -155,7 +142,6 @@ func TestSummaryMatchesWhatIsActuallyEnabled(t *testing.T) {
 		t.Errorf("summary() does not say the timer is the only detection left:\n%s", got)
 	}
 
-	// Whatever the state, these are always installed.
 	for _, want := range []string{"dispatcher", "resume", "systemd timer"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("summary() is missing %q:\n%s", want, got)
@@ -163,9 +149,6 @@ func TestSummaryMatchesWhatIsActuallyEnabled(t *testing.T) {
 	}
 }
 
-// NM merges conf.d per key: overriding `uri` without `response` leaves the
-// distro's expected body in place, and NM then calls a good 204 a captive
-// portal. Empty response means "204 or no data" — what generate_204 sends.
 func TestConnectivityConfSetsResponseAlongsideURI(t *testing.T) {
 	if !strings.Contains(connectivityConf, "uri=") {
 		t.Fatal("connectivityConf no longer sets uri; this test needs rewriting")

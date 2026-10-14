@@ -44,7 +44,6 @@ func TestOpenCreatesAMissingLog(t *testing.T) {
 	}
 }
 
-// An unwritable log must degrade to "no log", never to a failed login.
 func TestOpenReturnsNilRatherThanFailing(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("a missing parent directory is the portable way to force this")
@@ -90,7 +89,6 @@ func TestRotateRollsAnOversizedLog(t *testing.T) {
 		t.Error(".1 does not hold what the live log held")
 	}
 
-	// The rolled log must not accumulate generations, only replace the one.
 	if err := os.WriteFile(path, []byte(strings.Repeat("y", 2048)), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -105,8 +103,6 @@ func TestRotateRollsAnOversizedLog(t *testing.T) {
 	}
 }
 
-// The file only exists on Windows; everywhere else journald and the unified log
-// already have the output, and a second copy would just rot.
 func TestOpenIsWindowsOnly(t *testing.T) {
 	f := Open()
 	if f != nil {
@@ -161,8 +157,6 @@ func TestLastLineReadsTheEnd(t *testing.T) {
 	}
 }
 
-// The tail read starts mid-line on a long log; the scan must not hand back that
-// fragment as if it were the newest entry.
 func TestLastLineIgnoresTheTruncatedFirstLine(t *testing.T) {
 	path := filepath.Join(t.TempDir(), Name)
 

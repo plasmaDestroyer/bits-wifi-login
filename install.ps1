@@ -1,8 +1,4 @@
-# BITS WiFi Login - bootstrap installer (Windows)
-# Usage: irm https://plasmaDestroyer.github.io/bits-wifi-login/install.ps1 | iex
-#
-# This only fetches the binary. Everything else - credentials, background
-# triggers, uninstall - lives in `bits-wifi-login install`.
+# Bootstrap: fetch the binary, let `bits-wifi-login install` do the rest.
 
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '')]
 param()
@@ -21,8 +17,7 @@ Write-Host ""
 
 Write-Host "[1/2] Downloading..." -ForegroundColor Cyan
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-# Windows will not overwrite a running .exe but will rename one, and a watcher
-# may be running it right now. The .old copy is cleared on the next run.
+# Windows can rename a running .exe but not overwrite it. .old goes next run.
 Invoke-WebRequest -Uri $BinUrl -OutFile "$Bin.new"
 Unblock-File -Path "$Bin.new"
 Remove-Item "$Bin.old" -Force -ErrorAction SilentlyContinue

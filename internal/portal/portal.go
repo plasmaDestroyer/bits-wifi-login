@@ -14,13 +14,9 @@ const (
 	timeout         = 10 * time.Second
 )
 
-// Bounds the probe alone, not the login round trips, which need the full 10s.
-// A live network answers in <100ms (84ms measured on campus), so this is only
-// ever paid when the session has just dropped and the request hangs — up to
-// three times per recovery, which is why it is 1s and not the 3s it once was.
-// Cutting early is safe: the login that follows gets a 204 and returns
-// ErrAlreadyOnline.
-// A var, not a const, so tests need not sleep for real seconds.
+// Probe only. Login round trips keep the full 10s. A live network answers in
+// ~84ms, so this is only paid when the session just died. A var so tests
+// don't sleep for real.
 var probeTimeout = time.Second
 
 type Portal struct {
@@ -29,21 +25,17 @@ type Portal struct {
 	connectivityURL string
 	baseURL         string
 
-	// interceptBody is what the probe answered with, kept so a failed token
-	// extraction can dump the evidence instead of just saying "not found".
-	interceptBody []byte
-	// interceptLocation is the probe's Location header, kept for the same reason.
+	// The last probe's answer, kept for token extraction and failure dumps.
+	// Status matters: an empty body alone can't tell a VPN from a changed portal.
+	interceptBody     []byte
 	interceptLocation string
-	// interceptStatus is the probe's HTTP status. An empty body says nothing on
-	// its own: a VPN swallowing the probe and a changed portal look identical.
-	interceptStatus int
-	// fresh marks a probe result that magicToken has not consumed yet.
-	fresh bool
+	interceptStatus   int
+	fresh             bool // not yet consumed by magicToken
 }
 
-// New builds a Portal aimed at the real BITS captive portal. Both clients share
-// one cookie jar: the portal sets a session cookie on GET /fgtauth?<magic> and
-// expects it back on the credential POST, which a different client issues.
+// New builds a Portal for the real BITS portal. Both clients MUST share one
+// cookie jar: the cookie set on GET /fgtauth?<magic> has to come back on the
+// credential POST, which the other client sends.
 func New() *Portal {
 	jar, _ := cookiejar.New(nil)
 
@@ -61,12 +53,9 @@ func New() *Portal {
 	}
 }
 
-// probe makes the connectivity check once and remembers the answer: the login
-// flow needs the same response twice, and asking twice paid a second round trip
-// exactly when someone is sitting at a dead network waiting to be let back on.
+// probe makes the connectivity check and remembers the answer for magicToken.
 func (p *Portal) probe() (int, error) {
-	// Cleared up front so a failed probe reports nothing rather than the last
-	// good one: a leftover 204 made Login call a real expiry "already online".
+	// Cleared first: a leftover 204 once made a real expiry look "already online".
 	p.interceptStatus, p.interceptBody, p.interceptLocation, p.fresh = 0, nil, "", false
 
 	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)

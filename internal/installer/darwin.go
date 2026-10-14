@@ -37,8 +37,7 @@ func install(exe string) error {
 		return fmt.Errorf("installer: creating LaunchAgents dir: %w", err)
 	}
 
-	// A binary fetched over the network can carry a quarantine flag Gatekeeper
-	// refuses to run. Failure here is fine — a locally built binary has none.
+	// Clear Gatekeeper's quarantine flag. A local build has none, so ignore errors.
 	_ = run("xattr", "-d", "com.apple.quarantine", exe)
 
 	if err := write(path, plist(exe), 0644); err != nil {
@@ -64,9 +63,7 @@ func install(exe string) error {
 func uninstall() (int, error) {
 	removed := 0
 
-	// runOut, not run: booting out an agent that was never loaded is the normal
-	// second-uninstall case, and launchctl's "No such process" on stderr only
-	// contradicts the friendlier line below it.
+	// runOut: a second uninstall would print launchctl's "No such process".
 	if _, err := runOut("launchctl", "bootout", service()); err != nil {
 		fmt.Println("• Not loaded: launchd agent")
 	} else {
@@ -88,8 +85,7 @@ func uninstall() (int, error) {
 	return removed, nil
 }
 
-// The plist on disk and the agent actually loaded are two different things, and
-// only the second one logs anybody in — so report both rather than one.
+// Report the plist and the loaded agent separately: only the loaded one runs.
 func triggers() []Trigger {
 	_, statErr := os.Stat(plistPath())
 	_, loadErr := runOut("launchctl", "print", service())

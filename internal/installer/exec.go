@@ -21,9 +21,7 @@ func run(name string, args ...string) error {
 	return nil
 }
 
-// runOut is run() for callers that must decide what a failure means before the
-// user is told anything — a retry is coming, or the tool's own wording is worse
-// than ours. Nothing reaches the terminal unless the caller prints it.
+// runOut is run() that captures output, for callers that word failures themselves.
 func runOut(name string, args ...string) (string, error) {
 	out, err := exec.Command(name, args...).CombinedOutput()
 	if err != nil {

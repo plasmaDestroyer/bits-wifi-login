@@ -2,19 +2,13 @@ package installer
 
 import "fmt"
 
-// LaunchAgent plist generation. Deliberately NOT build-tagged, even though only
-// the darwin build uses it, so its tests run on every platform in CI instead of
-// only on a Mac — the same reason windowstask.go is untagged.
-//
-// The one thing a unit test cannot prove is that launchd accepts the file. That
-// is TestPlistIsWellFormed, which shells out to plutil and therefore only runs
-// on the macOS CI runner.
+// LaunchAgent plist generation. Untagged on purpose so its tests run in CI on
+// every platform, not only on a Mac.
 
 const label = "ac.bits.wifi-login"
 
-// 5 minutes rather than Linux's 10: WatchPaths only fires on network changes,
-// and macOS has no equivalent of NM's connectivity-change, so this poll is the
-// only thing that notices the portal session expiring.
+// 5 min, not Linux's 10: macOS has no connectivity-change, so this poll is the
+// only thing that notices an expiry.
 func plist(exe string) string {
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"

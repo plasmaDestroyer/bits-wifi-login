@@ -32,8 +32,7 @@ jobs:
         with:
           go-version-file: go.mod
 
-      # The asset name is a contract with remote-install.* — don't rename it there
-      # without renaming it here.
+      # Asset names are a contract with install.sh / install.ps1.
       - name: Build
         env:
           GOOS: ${{ matrix.goos }}

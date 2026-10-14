@@ -3,8 +3,7 @@ package wifi
 import "testing"
 
 func TestParseNmcli(t *testing.T) {
-	// Captured from a real `nmcli -t -f active,ssid dev wifi` on campus — note the
-	// active row is last, and hidden networks show up as empty-SSID rows.
+	// Real campus capture: active row last, hidden networks have empty SSIDs.
 	const real = `no:BITS-STAFF
 no:BITS-STUDENT
 no:
@@ -74,8 +73,6 @@ func TestParseAirport(t *testing.T) {
 }
 
 func TestParseNetsh(t *testing.T) {
-	// BSSID sits right below SSID and its value looks nothing like a network name —
-	// matching it instead is the obvious way to get this wrong.
 	const out = "\r\nThere is 1 interface on the system:\r\n\r\n" +
 		"    Name                   : Wi-Fi\r\n" +
 		"    State                  : connected\r\n" +

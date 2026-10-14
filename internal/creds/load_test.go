@@ -21,9 +21,7 @@ func TestLoad(t *testing.T) {
 		t.Errorf("Load() = %+v, want %+v", got, want)
 	}
 
-	// Windows has no Unix mode bits — os.Chmod there only toggles the read-only
-	// attribute, so the tightening Load does is a no-op and asserting it would
-	// fail for the wrong reason. See the comment on Load.
+	// No Unix mode bits on Windows, see Load.
 	if runtime.GOOS == "windows" {
 		return
 	}

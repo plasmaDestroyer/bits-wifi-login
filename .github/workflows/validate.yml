@@ -11,18 +11,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        # macos-latest and windows-latest are real machines, so use them for the
-        # checks that cannot run anywhere else: TestPlistIsWellFormed shells out to
-        # plutil, which is what launchd itself validates with, and is the closest
-        # thing to "would macOS accept this file" without owning a Mac.
-        #
-        # The generators themselves (plist, task XML) are deliberately untagged and
-        # unit-tested on every platform — see darwinplist.go and windowstask.go.
-        #
-        # windows-latest also runs the real schtasks round-trip, enabled below.
-        #
-        # Still not covered: loading the launchd agent, which needs a GUI session
-        # a headless runner does not have.
+        # Real macOS/Windows runners for plutil and the schtasks round-trip.
+        # Not covered: loading the launchd agent (needs a GUI session).
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
@@ -41,11 +31,7 @@ jobs:
       - name: Test
         run: go test ./...
         env:
-          # windows-latest is a real, throwaway Windows box, so let the schtasks
-          # round-trip actually register a task. It is the only check that proves
-          # Task Scheduler accepts the generated XML — everything short of it can
-          # be green while schtasks rejects the file for a reason it will not
-          # explain. The test uses a throwaway task name and always deletes it.
+          # Throwaway runner: let the schtasks test register a real task.
           BITS_WIFI_TEST_SCHTASKS: ${{ matrix.os == 'windows-latest' && '1' || '0' }}
 
       - name: Build

@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-// type feeds a whole string through key() the way the read loop does, and
-// returns what was stored and what the terminal would have shown.
 func typeIn(s string) (typed string, screen string) {
 	var buf []byte
 	var out strings.Builder
@@ -38,8 +36,6 @@ func TestKey(t *testing.T) {
 			wantScreen: "*******",
 		},
 		{
-			// A rune is up to four bytes and key() sees one at a time, so a naive
-			// implementation draws four stars for one character.
 			name:       "a multi-byte character is one star",
 			input:      "aé☃",
 			wantTyped:  "aé☃",
@@ -52,8 +48,6 @@ func TestKey(t *testing.T) {
 			wantScreen: "***\b \b",
 		},
 		{
-			// Erasing a byte at a time would leave half a rune behind and corrupt
-			// the password without showing anything on screen.
 			name:       "backspace erases a whole rune",
 			input:      "aé\x7f",
 			wantTyped:  "a",
@@ -72,8 +66,6 @@ func TestKey(t *testing.T) {
 			wantScreen: "***" + "\b \b\b \b\b \b",
 		},
 		{
-			// Arrow keys and the like arrive as control bytes. Storing them would
-			// put invisible junk in the password.
 			name:       "other control bytes are ignored",
 			input:      "a\x01\x1bb",
 			wantTyped:  "ab",
@@ -107,7 +99,6 @@ func TestKey(t *testing.T) {
 	}
 }
 
-// Ctrl-C must not be mistaken for a submitted password.
 func TestKeyCtrlCAbandonsTheInput(t *testing.T) {
 	out, _, done := key([]byte("secret"), keyCtrlC)
 

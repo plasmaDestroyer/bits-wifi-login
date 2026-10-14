@@ -1,10 +1,5 @@
-// Package runlog keeps the append-only log of trigger runs that the Windows
-// build has nowhere else to put.
-//
-// Linux runs under systemd and macOS under launchd, so on those platforms the
-// OS already keeps every line the binary writes and a file beside the binary
-// would only be a second, worse copy. Open reports that by returning nil, and
-// the caller carries on logging to stderr alone.
+// Package runlog keeps the run log on Windows, which has nowhere else to put
+// it. Linux and macOS already have journald and the unified log.
 package runlog
 
 import (
@@ -15,19 +10,13 @@ import (
 	"strings"
 )
 
-// Name is the log file's name. The Windows task action used to hard-code this
-// string separately; keep it here so the installer and the binary cannot drift.
+// Name is the log file's name.
 const Name = "bits-wifi-login.log"
 
-// maxBytes caps the live file before it is rolled to <Name>.1. A quiet run is
-// one line of about eighty bytes and the Windows triggers fire every five
-// minutes, so this holds several months and costs at most 1 MiB on disk.
+// maxBytes caps the live file before it rolls to <Name>.1: months of runs.
 const maxBytes = 512 << 10
 
-// Path resolves the log beside the running binary, the same way creds.conf is
-// resolved — the triggers that run it have no useful working directory. It
-// returns "" on the platforms that keep no file, which is what callers should
-// test rather than repeating the GOOS check.
+// Path is the log beside the binary, or "" on platforms that keep no file.
 func Path() string {
 	if runtime.GOOS != "windows" {
 		return ""
@@ -41,10 +30,7 @@ func Path() string {
 	return filepath.Join(filepath.Dir(exe), Name)
 }
 
-// Open returns the run log open for appending, or nil when this platform logs
-// somewhere better. A log we cannot write is never a reason to fail a login, so
-// every error here is answered with nil rather than an error the caller would
-// only have to ignore.
+// Open returns the log for appending, or nil. An unwritable log never fails a login.
 func Open() *os.File {
 	path := Path()
 	if path == "" {
@@ -54,9 +40,7 @@ func Open() *os.File {
 	return openAt(path)
 }
 
-// LastLine returns the most recent line in the run log, which is what `status`
-// shows to answer "has this thing run at all?". Empty when there is no log, no
-// file, or nothing in it yet.
+// LastLine returns the newest log line for `status`, or "".
 func LastLine() string {
 	path := Path()
 	if path == "" {
@@ -66,10 +50,7 @@ func LastLine() string {
 	return lastLineAt(path)
 }
 
-// lastLineAt reads only the end of the file. The log is capped, but a cap of
-// half a megabyte is still no reason to pull all of it into memory to look at
-// one line — and a tail that starts mid-line is harmless, because the scan runs
-// backwards and stops before it gets there.
+// lastLineAt reads only the tail of the file.
 func lastLineAt(path string) string {
 	f, err := os.Open(path)
 	if err != nil {
@@ -115,16 +96,14 @@ func openAt(path string) *os.File {
 	return f
 }
 
-// rotate rolls the log over to <path>.1 once it outgrows max, keeping exactly
-// one generation. Failure is silent by design: the worst case is a log that
-// grows past the cap, which is still better than a run that refuses to happen.
+// rotate keeps one old generation. Failures are silent: an oversized log beats
+// a skipped login.
 func rotate(path string, max int64) {
 	info, err := os.Stat(path)
 	if err != nil || info.Size() <= max {
 		return
 	}
 
-	// os.Rename replaces an existing destination on Windows too (MoveFileEx with
-	// MOVEFILE_REPLACE_EXISTING), so the previous generation needs no unlink.
+	// os.Rename replaces the destination on Windows too.
 	_ = os.Rename(path, path+".1")
 }

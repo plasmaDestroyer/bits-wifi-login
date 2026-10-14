@@ -5,7 +5,6 @@ import (
 	"time"
 )
 
-// probes returns a probe func that answers from a script, then stays online.
 func probes(script ...bool) func() bool {
 	i := 0
 
@@ -20,16 +19,13 @@ func probes(script ...bool) func() bool {
 	}
 }
 
-// The 2026-09-04 04:40 failure: WARP's DNS proxy timed out resolving the probe
-// host at 04:40:30, the network answered 204 three seconds later, and the
-// watcher exited on that healed blip — nine seconds before the session really
-// expired at 04:40:39. Nothing was left camping on it.
+// The 2026-09-04 04:40 failure, see confirmDrop.
 func TestWatchLoopKeepsWatchingAfterAFalseAlarm(t *testing.T) {
 	calls := 0
 	login := func() bool {
 		calls++
 
-		return calls > 1 // the first is the blip that healed by itself
+		return calls > 1
 	}
 
 	if !watchLoop(time.Now().Add(time.Minute), time.Millisecond,
@@ -42,8 +38,6 @@ func TestWatchLoopKeepsWatchingAfterAFalseAlarm(t *testing.T) {
 	}
 }
 
-// A single miss is a hiccup, not an expiry: acting on one is what let a DNS
-// timeout stand in for a session drop.
 func TestWatchLoopIgnoresASingleMissedProbe(t *testing.T) {
 	login := func() bool {
 		t.Fatal("logged in after one failed probe")

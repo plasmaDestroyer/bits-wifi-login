@@ -1,6 +1,5 @@
 // Package installer registers and removes the OS-native background triggers
-// that run the login binary. Everything platform-specific lives in the
-// build-tagged files beside this one; the shared preflight is here.
+// that run the login binary. Platform bits live in the build-tagged files.
 package installer
 
 import (
@@ -16,22 +15,18 @@ import (
 	"github.com/plasmaDestroyer/bits-wifi-login/internal/session"
 )
 
-// Trigger is one background trigger and whether the OS still has it. Asking the
-// OS is the only honest answer: an install can rot without anything telling the
-// user, and "is it still set up?" should not require learning schtasks.
+// Trigger is one background trigger and whether the OS still has it.
 type Trigger struct {
 	Name       string
 	Registered bool
 }
 
-// Triggers reports the platform's triggers, newest install or not.
+// Triggers asks the OS what is registered right now.
 func Triggers() []Trigger {
 	return triggers()
 }
 
-// Files lists what an install puts on disk: the binary, then whatever it keeps
-// beside itself. Every path here is reported whether or not it exists — callers
-// that only want the real ones say so.
+// Files lists what an install puts on disk, whether or not each path exists.
 func Files() []string {
 	files := []string{}
 
@@ -39,10 +34,7 @@ func Files() []string {
 		files = append(files, exe)
 	}
 
-	// session.json but not session.lock: the lock is machinery that creates and
-	// removes itself, so it would read as "missing" in status forever and offer
-	// nothing to delete. A stale one left by a killed watcher goes with the
-	// directory, which is what the removal notice says to delete anyway.
+	// Not session.lock: it comes and goes, and would read "missing" forever.
 	files = append(files, creds.DefaultPath(), session.DefaultPath())
 
 	if path := runlog.Path(); path != "" {
@@ -52,17 +44,14 @@ func Files() []string {
 	return files
 }
 
-// Install prompts for credentials if needed, then wires up the platform's
-// triggers. It is idempotent — re-running repairs a broken install.
+// Install prompts for credentials if needed, then wires up the triggers.
+// Idempotent: re-running repairs a broken install.
 func Install() error {
 	exe, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("installer: cannot locate the running binary: %w", err)
 	}
 
-	// The binary path is interpolated into a root-run dispatcher script, a
-	// systemd unit and a cmd.exe command line. Reject anything those cannot
-	// carry safely rather than trying to quote for three grammars at once.
 	if err := preflight(exe); err != nil {
 		return err
 	}
@@ -75,10 +64,7 @@ func Install() error {
 		return err
 	}
 
-	// Every instruction this tool prints, and every line of the README, says to
-	// run `bits-wifi-login <something>`. None of that is true while the install
-	// directory is somewhere PATH has never heard of. Not fatal, though: a tool
-	// that logs you in perfectly well is not worth failing over a PATH entry.
+	// Not fatal: a working login is not worth failing over a PATH entry.
 	linked, err := link(exe)
 	if err != nil {
 		fmt.Printf("⚠ Could not add %s to your PATH: %v\n"+
@@ -87,8 +73,6 @@ func Install() error {
 
 	fmt.Print("\n✓ Installation complete.\n\n" + summary() + "\n" + where(exe))
 
-	// Only when this run is what put it on PATH. On a repair the user is already
-	// standing in a terminal that works, and telling them to close it is wrong.
 	if linked {
 		fmt.Print(pathNote())
 	}
@@ -98,8 +82,6 @@ func Install() error {
 	return nil
 }
 
-// where answers the two questions the install output never used to: what did
-// this put on my machine, and how do I get rid of it.
 func where(exe string) string {
 	b := &strings.Builder{}
 
@@ -116,8 +98,7 @@ func where(exe string) string {
 	return b.String()
 }
 
-// Uninstall removes the triggers. creds.conf is deliberately left behind so a
-// reinstall does not re-prompt.
+// Uninstall removes the triggers. creds.conf stays so a reinstall won't re-prompt.
 func Uninstall() error {
 	removed, err := uninstall()
 	if err != nil {
@@ -129,8 +110,6 @@ func Uninstall() error {
 		fmt.Println("✓ Removed the PATH entry")
 	}
 
-	// "✓ Uninstall complete." after removing nothing at all reads as a job well
-	// done, which is how running uninstall twice ends up looking like a bug.
 	if removed == 0 {
 		fmt.Print("\nNothing to remove — the background triggers were not registered.\n")
 		return nil
@@ -141,9 +120,7 @@ func Uninstall() error {
 	return nil
 }
 
-// leftovers names what uninstall deliberately did not touch. Saying "creds.conf
-// was left intact" without saying where it is leaves the user to go looking for
-// a file whose location was never printed anywhere.
+// leftovers names, with paths, what uninstall deliberately did not touch.
 func leftovers() string {
 	b := &strings.Builder{}
 
@@ -159,21 +136,15 @@ func leftovers() string {
 	return b.String()
 }
 
-// writeCreds writes into a temporary file and renames it into place, so
-// creds.conf either does not exist or is complete. os.WriteFile creates the file
-// first and fills it after, so a process killed in between leaves a truncated
-// creds.conf behind — and because ensureCreds skips the prompt whenever the file
-// exists, that half-written file would be silently accepted on every later run.
-//
-// The temp file is created in the same directory, since a rename is only atomic
-// within one filesystem. os.CreateTemp already makes it 0600, which is the mode
-// creds.conf has to keep.
+// writeCreds writes a 0600 temp file in the same directory (rename is only
+// atomic on one filesystem) and renames it into place. A half-written
+// creds.conf would skip the prompt forever after.
 func writeCreds(path string, c creds.Creds) error {
 	tmp, err := os.CreateTemp(filepath.Dir(path), ".creds-*")
 	if err != nil {
 		return fmt.Errorf("installer: writing %s: %w", path, err)
 	}
-	defer os.Remove(tmp.Name()) // no-op once the rename has taken it
+	defer os.Remove(tmp.Name())
 
 	if _, err := tmp.WriteString(creds.Format(c)); err != nil {
 		tmp.Close()
@@ -223,8 +194,6 @@ func prompt() (creds.Creds, error) {
 
 	fmt.Print("Enter your BITS password: ")
 
-	// Echoes a star per character, so the prompt cannot be mistaken for a frozen
-	// terminal and no explanatory line is needed on any platform.
 	password, err := readMasked(int(os.Stdin.Fd()))
 	if err != nil {
 		return creds.Creds{}, fmt.Errorf("installer: reading password: %w — run this straight from a terminal, it cannot read a password through a pipe", err)

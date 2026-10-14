@@ -36,7 +36,7 @@ func TestLogin(t *testing.T) {
 					w.WriteHeader(http.StatusFound)
 				case r.URL.Path == "/fgtauth": // session init
 					w.WriteHeader(http.StatusOK)
-				case r.Method == http.MethodPost && r.URL.Path == "/": // creds rejected: no keepalive
+				case r.Method == http.MethodPost && r.URL.Path == "/": // no keepalive = rejected
 					w.Write([]byte("authentication failed"))
 				}
 			},
@@ -135,8 +135,6 @@ func TestRejectionError(t *testing.T) {
 	}
 }
 
-// The dump gets attached to bug reports, so a portal page that echoes the
-// submitted password back must not carry it into the file.
 func TestRejectionErrorRedactsPassword(t *testing.T) {
 	body := `<input name="password" value="hunter2"><p>Invalid password</p>`
 
@@ -157,7 +155,6 @@ func TestRejectionErrorRedactsPassword(t *testing.T) {
 	}
 }
 
-// dumpPath pulls the "saved to <path>" filename back out of the error message.
 func dumpPath(t *testing.T, err error) string {
 	t.Helper()
 
@@ -188,8 +185,6 @@ func TestMagicToken(t *testing.T) {
 			wantOk:    true,
 		},
 		{
-			// What the real BITS portal does: answers the probe with a page
-			// pointing at /fgtauth?<magic> instead of setting a Location header.
 			name: "intercept body",
 			handler: func(w http.ResponseWriter, r *http.Request) {
 				w.Write([]byte(`<meta http-equiv="refresh" content="0; url=https://fw.bits-pilani.ac.in:8090/fgtauth?deadbeef12345678">`))
@@ -243,9 +238,7 @@ func TestMagicToken(t *testing.T) {
 	}
 }
 
-// A transient outage that heals between IsLoggedIn's probe and the token probe
-// used to spend four login attempts and then exit fatally, because a 204 has no
-// magic token in it. Seen live twice on 2026-08-31.
+// Seen live twice on 2026-08-31: a healed blip burned four attempts and exited fatally.
 func TestLoginReportsAlreadyOnlineWhenTheProbeAnswers204(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
@@ -263,13 +256,10 @@ func TestLoginReportsAlreadyOnlineWhenTheProbeAnswers204(t *testing.T) {
 	}
 }
 
-// The probe must give up on its own short deadline rather than the client's long
-// one. A dropped session makes the probe hang, and it is paid twice per recovery
-// — measured as most of a 23s outage on 2026-08-31.
 func TestProbeGivesUpOnItsOwnDeadline(t *testing.T) {
 	blocked := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		<-blocked // hang exactly like a network that just went away
+		<-blocked
 	}))
 	defer srv.Close()
 	defer close(blocked)
@@ -287,17 +277,12 @@ func TestProbeGivesUpOnItsOwnDeadline(t *testing.T) {
 	if online {
 		t.Error("IsLoggedIn() = true against a server that never answers")
 	}
-	// The client's own Timeout is 10s; anything near that means the probe
-	// deadline was ignored and the recovery is slow again.
 	if elapsed > time.Second {
 		t.Errorf("IsLoggedIn() took %v, want it bounded by probeTimeout", elapsed)
 	}
 }
 
-// A failed probe must not inherit the previous probe's 204. On 2026-10-13 the
-// probe hung at 11:16:43, Login re-probed into the same hang, found the 204 left
-// over from the last healthy probe, and reported "came back on its own" — five
-// seconds of dead network spent on a session that had in fact expired.
+// 2026-10-13: a hung probe inherited the last 204 and called a real expiry "came back on its own".
 func TestLoginIgnoresAStale204AfterAFailedProbe(t *testing.T) {
 	blocked := make(chan struct{})
 	var sick atomic.Bool

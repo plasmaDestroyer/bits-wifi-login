@@ -1,7 +1,5 @@
-// Package wifi reports the SSID the machine is currently associated with.
-//
-// Each platform shells out to the same tool the shell implementation used, and
-// the parsing is split from the exec so it can be tested without a radio.
+// Package wifi reports the current SSID. Parsing is split from exec so it can
+// be tested without a radio.
 package wifi
 
 import (
@@ -62,9 +60,8 @@ func run(name string, args ...string) (string, error) {
 	return string(out), nil
 }
 
-// parseNmcli reads `nmcli -t -f active,ssid dev wifi`: one "active:ssid" record
-// per line, of which exactly one is prefixed "yes:". -t escapes colons inside
-// the SSID as "\:".
+// parseNmcli reads `nmcli -t -f active,ssid dev wifi`. The active row starts
+// "yes:". Colons inside the SSID come escaped as "\:".
 func parseNmcli(out string) string {
 	for _, line := range strings.Split(out, "\n") {
 		if ssid, ok := strings.CutPrefix(line, "yes:"); ok {
@@ -74,8 +71,7 @@ func parseNmcli(out string) string {
 	return ""
 }
 
-// parseHardwarePorts reads `networksetup -listallhardwareports` and returns the
-// device of the Wi-Fi port, which is named on the line after the port name.
+// parseHardwarePorts finds the Wi-Fi device in `networksetup -listallhardwareports`.
 func parseHardwarePorts(out string) string {
 	lines := strings.Split(out, "\n")
 	for i, line := range lines {
@@ -94,8 +90,7 @@ func parseHardwarePorts(out string) string {
 	return ""
 }
 
-// parseAirport reads `networksetup -getairportnetwork <iface>`, which prints
-// "Current Wi-Fi Network: <ssid>" when associated and a prose sentence when not.
+// parseAirport reads `networksetup -getairportnetwork <iface>`.
 func parseAirport(out string) string {
 	name, found := strings.CutPrefix(strings.TrimSpace(out), "Current Wi-Fi Network: ")
 	if !found {
@@ -104,8 +99,7 @@ func parseAirport(out string) string {
 	return name
 }
 
-// netshRe deliberately anchors on "SSID" at the start of the field so the
-// adjacent "BSSID" line cannot match.
+// Anchored so the "BSSID" line right below can't match.
 var netshRe = regexp.MustCompile(`(?m)^\s*SSID\s+:\s*(.*)$`)
 
 func parseNetsh(out string) string {

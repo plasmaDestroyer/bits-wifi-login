@@ -4,9 +4,6 @@ package installer
 
 import "testing"
 
-// Getting this wrong in the false direction appends a duplicate entry to the
-// user's PATH on every install; getting it wrong in the true direction means
-// the entry is never added at all.
 func TestSamePath(t *testing.T) {
 	const dir = `C:\Users\ASUS\AppData\Local\bits-wifi-login`
 
@@ -15,9 +12,9 @@ func TestSamePath(t *testing.T) {
 		same  bool
 	}{
 		{dir, true},
-		{`c:\users\asus\appdata\local\bits-wifi-login`, true}, // Windows paths are case-insensitive
-		{dir + `\`, true},       // a trailing separator is common in PATH
-		{`"` + dir + `"`, true}, // and so are quotes
+		{`c:\users\asus\appdata\local\bits-wifi-login`, true},
+		{dir + `\`, true},
+		{`"` + dir + `"`, true},
 		{"  " + dir + "  ", true},
 		{dir + `-old`, false},
 		{`C:\Windows\System32`, false},
@@ -29,8 +26,6 @@ func TestSamePath(t *testing.T) {
 	}
 }
 
-// An empty PATH entry must never match, or unlink would strip every empty
-// segment and listed would think we are already installed.
 func TestSamePathIgnoresEmptyEntries(t *testing.T) {
 	if samePath("", "") {
 		t.Error(`samePath("", "") = true — an empty PATH segment matched an empty directory`)

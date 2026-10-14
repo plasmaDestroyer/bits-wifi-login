@@ -2,8 +2,6 @@ package creds
 
 import "testing"
 
-// The whole point of Escape living next to unescape: whatever the installer
-// writes, the loader must read back byte for byte.
 func TestEscapeParseRoundTrip(t *testing.T) {
 	values := []string{
 		"plain",
@@ -21,8 +19,7 @@ func TestEscapeParseRoundTrip(t *testing.T) {
 
 	for _, v := range values {
 		t.Run(v, func(t *testing.T) {
-			// An empty password is rejected by Parse on purpose, so pair each
-			// value with a known-good counterpart and check one direction at a time.
+			// Parse rejects empty fields, so pair each value with a valid one.
 			got, err := Parse(Format(Creds{Username: v, Password: "sentinel"}))
 			if v == "" {
 				if err == nil {

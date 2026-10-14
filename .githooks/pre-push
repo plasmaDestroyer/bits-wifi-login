@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Platform code is build-tagged, so vet and test on the host prove nothing about
-# the other two. CI catches this, but not before the push is public.
+# Platform code is build-tagged, so the host build proves nothing about the others.
 set -e
 
 GOOS=windows GOARCH=amd64 go build ./...

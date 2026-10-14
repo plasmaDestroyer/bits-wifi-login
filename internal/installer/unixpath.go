@@ -9,13 +9,8 @@ import (
 	"slices"
 )
 
-// ~/.local/bin, not a shell rc file. Editing .bashrc means guessing which of
-// bash, zsh and fish the user actually runs, and leaving a line behind that
-// uninstall then has to find again in a file the user has since edited. A
-// symlink is one inode: trivially placed, trivially removed, and every
-// mainstream distro already puts this directory on PATH when it exists.
-//
-// macOS does not, which is what the warning in Install is for.
+// ~/.local/bin symlink, not a shell rc edit: no guessing bash/zsh/fish, and
+// trivial to remove. macOS lacks it on PATH, hence the warning in Install.
 func linkPath() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -39,9 +34,7 @@ func link(exe string) (bool, error) {
 		return false, fmt.Errorf("installer: creating %s: %w", filepath.Dir(path), err)
 	}
 
-	// Replace whatever is there, but only if it is one of ours or nothing at
-	// all — clobbering an unrelated binary someone put here would be worse than
-	// leaving the command unavailable.
+	// Replace only a symlink or nothing. Never someone's real file.
 	switch _, err := os.Lstat(path); {
 	case err == nil:
 		if _, err := os.Readlink(path); err != nil {
@@ -66,8 +59,7 @@ func link(exe string) (bool, error) {
 	return true, nil
 }
 
-// unlink removes the symlink, and only if it still points at this binary. A
-// link someone repointed at a different build is theirs, not ours to delete.
+// unlink removes the symlink only if it still points at this binary.
 func unlink(exe string) bool {
 	path := linkPath()
 	if path == "" {
@@ -81,8 +73,6 @@ func unlink(exe string) bool {
 	return os.Remove(path) == nil
 }
 
-// Nothing to note here, unlike Windows: the symlink lands in a directory that
-// is already on PATH, so the name resolves in the very shell that ran install.
 func pathNote() string {
 	return ""
 }

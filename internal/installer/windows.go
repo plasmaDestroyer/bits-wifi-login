@@ -13,13 +13,10 @@ import (
 
 // ponytail: no upfront elevation check. schtasks reports "Access is denied."
 // clearly enough, and registering a task for the current user often does not
-// need elevation at all — checking would only reject cases that work.
+// need elevation at all, so checking would only reject cases that work.
 //
-// The path is still checked. It no longer goes through a cmd.exe command line,
-// only into an XML <Command> element, so a quote is merely impossible rather
-// than dangerous — but a newline there would be folded into whitespace and the
-// task would silently run something else. Windows filenames can hold neither,
-// which makes this an assertion rather than a filter; assert it anyway.
+// A newline in the path would be folded into XML whitespace and run something
+// else. Windows filenames can't hold one. Assert it anyway.
 func preflight(exe string) error {
 	if strings.ContainsAny(exe, "\"\n\r") {
 		return fmt.Errorf("installer: refusing to install from %q — the path must not contain quotes or newlines", exe)
@@ -40,10 +37,8 @@ func install(exe string) error {
 		{eventTask, func(l string) string { return eventTaskXML(user, exe, l) }, "on network connect and on resume"},
 	}
 
-	// S4U is what keeps the login invisible, but it needs the "log on as a batch
-	// job" right, which not every account has. Degrading to InteractiveToken is
-	// better than refusing to install — it only costs the window back — so try
-	// the quiet one first and say plainly when we could not have it.
+	// S4U needs the "log on as a batch job" right. Without it fall back to
+	// InteractiveToken and its console window rather than refuse to install.
 	logon := logonS4U
 
 	for _, t := range tasks {
@@ -69,7 +64,6 @@ func install(exe string) error {
 func createTask(name, doc string) (string, error) {
 	path := filepath.Join(os.TempDir(), name+".xml")
 
-	// schtasks /xml wants a Unicode file; see utf16LE.
 	if err := os.WriteFile(path, utf16LE(doc), 0600); err != nil {
 		return "", fmt.Errorf("installer: writing %s: %w", path, err)
 	}
@@ -78,7 +72,6 @@ func createTask(name, doc string) (string, error) {
 	return runOut("schtasks", "/create", "/tn", name, "/xml", path, "/f")
 }
 
-// firstLine keeps a schtasks complaint to the one line that says something.
 func firstLine(out string) string {
 	for _, line := range strings.Split(out, "\n") {
 		if line = strings.TrimSpace(line); line != "" {
@@ -89,14 +82,8 @@ func firstLine(out string) string {
 	return "no reason given"
 }
 
-// Ask before deleting, rather than deleting and interpreting the complaint.
-// Deleting a task that was never registered makes schtasks print "ERROR: The
-// system cannot find the file specified." straight to stderr — which is not an
-// error worth showing at all, let alone next to our own line saying the same
-// thing in kinder words. Reading that message back would also mean matching
-// English text on a machine that may not be running in English, and would still
-// leave a genuine refusal (access denied, a corrupt task) reported as "not
-// found". A query settles it in the one way that is both quiet and honest.
+// Query before deleting: deleting a missing task spews an error, and parsing
+// it would mean matching English text on a maybe-not-English machine.
 func uninstall() (int, error) {
 	removed := 0
 
