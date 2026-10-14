@@ -138,7 +138,7 @@ func TestSummaryMatchesWhatIsActuallyEnabled(t *testing.T) {
 			!on, on, got)
 	}
 
-	if !on && !strings.Contains(got, "ONLY drop detection") {
+	if !on && !strings.Contains(got, "only drop detection") {
 		t.Errorf("summary() does not say the timer is the only detection left:\n%s", got)
 	}
 
