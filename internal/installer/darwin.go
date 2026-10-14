@@ -102,7 +102,7 @@ func summary() string {
 		"    - Every 5 minutes (StartInterval — the reliable safety net)\n" +
 		"    - At login (RunAtLoad)\n\n" +
 		"  Logs:\n" +
-		"    log show --predicate 'process == \"bits-wifi-login\"' --last 1h\n\n" +
+		"    Background runs keep none; run `bits-wifi-login` in a terminal to watch one.\n\n" +
 		"  Repair:\n" +
 		"    Re-run `bits-wifi-login install` if triggers or permissions break.\n"
 }
