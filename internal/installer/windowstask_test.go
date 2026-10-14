@@ -66,7 +66,7 @@ func TestTaskXMLEscapesUser(t *testing.T) {
 	doc := mainTaskXML(`DOM&AIN\a<b`, `C:\x.exe`, logonS4U)
 
 	if strings.Contains(doc, `DOM&AIN`) {
-		t.Error("raw & survived into the task XML — the document will not parse")
+		t.Error("raw & survived into the task XML, so the document will not parse")
 	}
 	if !strings.Contains(doc, "DOM&amp;AIN") {
 		t.Errorf("user name was not XML-escaped:\n%s", doc)
@@ -93,7 +93,7 @@ func TestActionRunsTheBinaryDirectly(t *testing.T) {
 	}
 	if strings.Contains(strings.ToLower(got), "cmd.exe") ||
 		strings.Contains(strings.ToLower(got), "powershell") {
-		t.Errorf("a shell is back in the action — the console window returns with it:\n%s", got)
+		t.Errorf("a shell is back in the action, and the console window with it:\n%s", got)
 	}
 	if strings.Contains(got, "<Arguments>") {
 		t.Errorf("the binary takes no arguments from the scheduler:\n%s", got)
@@ -136,13 +136,13 @@ func TestStartBoundaryFormat(t *testing.T) {
 		t.Fatalf("startBoundary() = %q, want a bare local ISO-8601 timestamp", got)
 	}
 	if strings.HasSuffix(got, "Z") || strings.Contains(got, "+") {
-		t.Errorf("startBoundary() = %q — Task Scheduler wants local time with no zone suffix", got)
+		t.Errorf("startBoundary() = %q, but Task Scheduler wants local time with no zone suffix", got)
 	}
 }
 
 func TestTaskNamesAreStable(t *testing.T) {
 	if mainTask != "BITS-WiFi-Login" || eventTask != "BITS-WiFi-Login-OnConnect" {
-		t.Errorf("task names changed (%q, %q) — uninstall and the README refer to the old ones",
+		t.Errorf("task names changed (%q, %q), but uninstall and the README refer to the old ones",
 			mainTask, eventTask)
 	}
 }

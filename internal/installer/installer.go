@@ -68,7 +68,7 @@ func Install() error {
 	linked, err := link(exe)
 	if err != nil {
 		fmt.Printf("⚠ Could not add %s to your PATH: %v\n"+
-			"  The tool works regardless — run it by its full path.\n", filepath.Dir(exe), err)
+			"  Run it by its full path.\n", filepath.Dir(exe), err)
 	}
 
 	fmt.Print("\n✓ Installation complete.\n\n" + summary() + "\n" + where(exe))
@@ -76,8 +76,6 @@ func Install() error {
 	if linked {
 		fmt.Print(pathNote())
 	}
-
-	fmt.Print("\nAll set — enjoy never having to log in to the BITS portal by hand again.\n")
 
 	return nil
 }
@@ -91,9 +89,7 @@ func where(exe string) string {
 	}
 
 	b.WriteString("\n  Remove:\n" +
-		"    `bits-wifi-login uninstall` takes out the background triggers and\n" +
-		"    the PATH entry. The files above are just files — delete\n" +
-		"    " + filepath.Dir(exe) + " when you are done with them.\n")
+		"    `bits-wifi-login uninstall`, then delete " + filepath.Dir(exe) + "\n")
 
 	return b.String()
 }
@@ -111,7 +107,7 @@ func Uninstall() error {
 	}
 
 	if removed == 0 {
-		fmt.Print("\nNothing to remove — the background triggers were not registered.\n")
+		fmt.Print("\nNothing to remove, the background triggers were not registered.\n")
 		return nil
 	}
 
@@ -124,8 +120,7 @@ func Uninstall() error {
 func leftovers() string {
 	b := &strings.Builder{}
 
-	b.WriteString("  Your credentials were left intact so a reinstall does not re-prompt.\n" +
-		"  Delete these yourself when you are done with the tool:\n")
+	b.WriteString("  Left in place (delete when done):\n")
 
 	for _, path := range Files() {
 		if _, err := os.Stat(path); err == nil {
@@ -167,7 +162,7 @@ func ensureCreds(path string) error {
 		return nil
 	}
 
-	fmt.Println("No creds.conf found. Let's create one.")
+	fmt.Println("No creds.conf found.")
 
 	c, err := prompt()
 	if err != nil {
@@ -196,7 +191,7 @@ func prompt() (creds.Creds, error) {
 
 	password, err := readMasked(int(os.Stdin.Fd()))
 	if err != nil {
-		return creds.Creds{}, fmt.Errorf("installer: reading password: %w — run this straight from a terminal, it cannot read a password through a pipe", err)
+		return creds.Creds{}, fmt.Errorf("installer: reading password: %w. Run this straight from a terminal, it can't read a password through a pipe", err)
 	}
 
 	if username == "" || len(password) == 0 {

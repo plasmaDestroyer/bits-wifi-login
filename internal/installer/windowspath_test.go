@@ -28,7 +28,7 @@ func TestSamePath(t *testing.T) {
 
 func TestSamePathIgnoresEmptyEntries(t *testing.T) {
 	if samePath("", "") {
-		t.Error(`samePath("", "") = true — an empty PATH segment matched an empty directory`)
+		t.Error(`samePath("", "") = true, an empty PATH segment matched an empty directory`)
 	}
 }
 

@@ -19,7 +19,7 @@ import (
 // else. Windows filenames can't hold one. Assert it anyway.
 func preflight(exe string) error {
 	if strings.ContainsAny(exe, "\"\n\r") {
-		return fmt.Errorf("installer: refusing to install from %q — the path must not contain quotes or newlines", exe)
+		return fmt.Errorf("installer: refusing to install from %q: the path must not contain quotes or newlines", exe)
 	}
 
 	return nil
@@ -45,7 +45,7 @@ func install(exe string) error {
 		out, err := createTask(t.name, t.xml(logon))
 		if err != nil && logon == logonS4U {
 			fmt.Printf("⚠ Windows would not register a background task: %s\n"+
-				"  Falling back to an interactive task — a console window may flash on each run.\n",
+				"  Falling back to an interactive task. A console window may flash on each run.\n",
 				firstLine(out))
 
 			logon = logonInteractive
@@ -121,7 +121,5 @@ func summary() string {
 		"    - Every resume from sleep (Power-Troubleshooter Event ID 1)\n" +
 		"    - Every 5 minutes, and on login\n\n" +
 		"  Logs:\n" +
-		"    Get-Content \"" + runlog.Path() + "\" -Tail 50\n\n" +
-		"  Repair:\n" +
-		"    Re-run `bits-wifi-login install` if triggers or permissions break.\n"
+		"    Get-Content \"" + runlog.Path() + "\" -Tail 50\n"
 }

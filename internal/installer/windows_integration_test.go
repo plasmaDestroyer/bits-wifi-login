@@ -40,7 +40,7 @@ func TestSchtasksAcceptsGeneratedXML(t *testing.T) {
 			out, err := exec.Command("schtasks", "/create", "/tn", testTask, "/xml", xmlPath, "/f").CombinedOutput()
 			if err != nil {
 				if strings.Contains(string(out), "Access is denied") {
-					t.Fatalf("schtasks needs an elevated prompt — re-run this from an Administrator terminal.\n%s", out)
+					t.Fatalf("schtasks needs an elevated prompt. Re-run this from an Administrator terminal.\n%s", out)
 				}
 				t.Fatalf("schtasks rejected the %s task: %v\n%s", logon, err, out)
 			}

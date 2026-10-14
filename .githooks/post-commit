@@ -3,7 +3,7 @@
 # `install` from that live copy so trigger changes ship too. Skips install
 # when sudo can't prompt, rather than failing the commit.
 fail() {
-    echo "post-commit: $1 — the installed binary is now behind HEAD" >&2
+    echo "post-commit: $1, so the installed binary is now behind HEAD" >&2
     exit 0
 }
 
@@ -28,5 +28,5 @@ echo "post-commit: installed $("$live" version) to $live"
 if [ -t 2 ] || sudo -n true 2>/dev/null; then
     "$live" install || fail "install failed"
 else
-    echo "post-commit: no terminal for sudo, skipped install — run: $live install" >&2
+    echo "post-commit: no terminal for sudo, skipped install. Run: $live install" >&2
 fi

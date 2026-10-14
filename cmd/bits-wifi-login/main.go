@@ -64,7 +64,7 @@ func main() {
 }
 
 func usage(w *os.File) {
-	fmt.Fprint(w, `bits-wifi-login — auto-login for the BITS Pilani captive portal
+	fmt.Fprint(w, `bits-wifi-login: auto-login for the BITS Pilani captive portal
 
   bits-wifi-login              log in now (what the background triggers run)
   bits-wifi-login install      set up credentials and background triggers
@@ -124,9 +124,9 @@ func network() string {
 	case ssid == "":
 		return "not associated with any Wi-Fi network"
 	case wifi.IsBITS(ssid):
-		return fmt.Sprintf("%q — a BITS network", ssid)
+		return fmt.Sprintf("%q (a BITS network)", ssid)
 	default:
-		return fmt.Sprintf("%q — not a BITS network, so a run would do nothing", ssid)
+		return fmt.Sprintf("%q (not a BITS network)", ssid)
 	}
 }
 
@@ -135,7 +135,7 @@ func authentication() string {
 		return "authenticated"
 	}
 
-	return "no connectivity — a run would try to log in"
+	return "not logged in"
 }
 
 func login() {
@@ -159,7 +159,7 @@ func login() {
 	}
 	if !wifi.IsBITS(ssid) {
 		if verbose {
-			log.Printf("current WiFi is %q; not a BITS network. Skipping.", ssid)
+			log.Printf("current WiFi is %q, not a BITS network. Skipping.", ssid)
 		}
 		return
 	}
@@ -209,7 +209,7 @@ func watch(p *portal.Portal) {
 		return
 	}
 
-	log.Print("expiry did not arrive within the grace period, leaving it to the periodic check.")
+	log.Print("expiry did not arrive within the grace period.")
 }
 
 // confirmDrop consecutive failed probes count as an expiry. One is not enough:
@@ -288,7 +288,7 @@ func authenticate(p *portal.Portal, ssid string) bool {
 				log.Printf("login successful. Sessions last about %s, so the next expiry is due %s",
 					saved.Timeout.Round(time.Minute), saved.Deadline().Format(time.DateTime))
 			} else {
-				log.Print("login successful. No session lifetime measured yet, so the next expiry cannot be anticipated.")
+				log.Print("login successful. Session lifetime not measured yet.")
 			}
 
 			if err := session.Save(session.DefaultPath(), saved); err != nil {

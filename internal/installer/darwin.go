@@ -20,11 +20,11 @@ func service() string {
 
 func preflight(exe string) error {
 	if os.Geteuid() == 0 {
-		return errors.New("installer: do not run this with sudo — it installs a per-user LaunchAgent")
+		return errors.New("installer: do not run this with sudo, it installs a per-user LaunchAgent")
 	}
 
 	if strings.ContainsAny(exe, "\n\r") {
-		return fmt.Errorf("installer: refusing to install from %q — the path must not contain newlines", exe)
+		return fmt.Errorf("installer: refusing to install from %q: the path must not contain newlines", exe)
 	}
 
 	return nil
@@ -98,11 +98,9 @@ func triggers() []Trigger {
 
 func summary() string {
 	return "  Triggers:\n" +
-		"    - Network changes (WatchPaths on resolv.conf — fires on most Wi-Fi connects)\n" +
-		"    - Every 5 minutes (StartInterval — the reliable safety net)\n" +
+		"    - Network changes (WatchPaths on resolv.conf, fires on most Wi-Fi connects)\n" +
+		"    - Every 5 minutes (StartInterval, the fallback)\n" +
 		"    - At login (RunAtLoad)\n\n" +
 		"  Logs:\n" +
-		"    Background runs keep none; run `bits-wifi-login` in a terminal to watch one.\n\n" +
-		"  Repair:\n" +
-		"    Re-run `bits-wifi-login install` if triggers or permissions break.\n"
+		"    none for background runs\n"
 }

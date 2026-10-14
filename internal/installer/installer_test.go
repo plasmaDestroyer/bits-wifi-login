@@ -22,7 +22,7 @@ func TestFilesStartsWithTheBinary(t *testing.T) {
 
 	files := Files()
 	if len(files) == 0 {
-		t.Fatal("Files() is empty — the uninstall notice would name nothing at all")
+		t.Fatal("Files() is empty, so the uninstall notice would name nothing")
 	}
 	if files[0] != exe {
 		t.Errorf("Files()[0] = %q, want the running binary %q", files[0], exe)
@@ -107,7 +107,7 @@ func TestSpinnerStops(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(2 * time.Second):
-		t.Fatal("done() did not return; the animation goroutine was never joined")
+		t.Fatal("done() did not return, so the animation goroutine was never joined")
 	}
 }
 

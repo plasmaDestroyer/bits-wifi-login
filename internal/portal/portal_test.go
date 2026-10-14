@@ -30,7 +30,7 @@ func TestNewSharesCookieJar(t *testing.T) {
 	}
 
 	if gotCookie != "session123" {
-		t.Errorf("noFollow sent cookie %q, want %q — clients are not sharing a jar", gotCookie, "session123")
+		t.Errorf("noFollow sent cookie %q, want %q: clients are not sharing a jar", gotCookie, "session123")
 	}
 }
 
@@ -49,7 +49,7 @@ func TestNewNoFollowStopsAtRedirect(t *testing.T) {
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusFound {
-		t.Errorf("noFollow status = %d, want %d — redirect was followed, Location header is lost",
+		t.Errorf("noFollow status = %d, want %d: redirect was followed, Location header is lost",
 			res.StatusCode, http.StatusFound)
 	}
 }

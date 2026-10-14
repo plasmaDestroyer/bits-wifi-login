@@ -96,7 +96,7 @@ func TestLoginSuccess(t *testing.T) {
 		t.Fatalf("Login() = %v, want nil", err)
 	}
 	if !keepaliveHit {
-		t.Error("keepalive endpoint never hit — session not activated")
+		t.Error("keepalive endpoint never hit, so the session was not activated")
 	}
 	if s.LoginAt.IsZero() {
 		t.Errorf("Login() session = %+v, want a login time", s)

@@ -57,8 +57,7 @@ func link(exe string) (bool, error) {
 // pathNote says to close the terminal, not just open another: the shell that
 // ran install keeps its old PATH no matter what the registry says.
 func pathNote() string {
-	return "\n  Note: close this terminal and open a new one before running these —\n" +
-		"  the PATH change cannot reach a shell that is already open.\n"
+	return "\n  Note: close this terminal first, it still has the old PATH.\n"
 }
 
 func unlink(exe string) bool {

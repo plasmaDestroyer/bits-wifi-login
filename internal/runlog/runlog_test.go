@@ -83,7 +83,7 @@ func TestRotateRollsAnOversizedLog(t *testing.T) {
 	rotate(path, 1024)
 
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
-		t.Error("live log survived rotation — the next run will keep appending to it")
+		t.Error("live log survived rotation, so the next run would keep appending to it")
 	}
 	if got := read(t, path+".1"); got != old {
 		t.Error(".1 does not hold what the live log held")
@@ -117,7 +117,7 @@ func TestOpenIsWindowsOnly(t *testing.T) {
 func TestPathSitsBesideTheBinary(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		if Path() != "" {
-			t.Errorf("Path() = %q on %s, want \"\" — nothing should write a file here", Path(), runtime.GOOS)
+			t.Errorf("Path() = %q on %s, want \"\": nothing should write a file here", Path(), runtime.GOOS)
 		}
 		return
 	}

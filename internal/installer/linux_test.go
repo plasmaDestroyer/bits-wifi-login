@@ -151,7 +151,7 @@ func TestSummaryMatchesWhatIsActuallyEnabled(t *testing.T) {
 
 func TestConnectivityConfSetsResponseAlongsideURI(t *testing.T) {
 	if !strings.Contains(connectivityConf, "uri=") {
-		t.Fatal("connectivityConf no longer sets uri; this test needs rewriting")
+		t.Fatal("connectivityConf no longer sets uri, so this test needs rewriting")
 	}
 
 	if !strings.Contains(connectivityConf, "\nresponse=\n") {

@@ -38,7 +38,7 @@ func link(exe string) (bool, error) {
 	switch _, err := os.Lstat(path); {
 	case err == nil:
 		if _, err := os.Readlink(path); err != nil {
-			return false, fmt.Errorf("installer: %s already exists and is not a symlink — remove it or rename this binary", path)
+			return false, fmt.Errorf("installer: %s already exists and is not a symlink. Remove it or rename this binary", path)
 		}
 		if err := os.Remove(path); err != nil {
 			return false, fmt.Errorf("installer: replacing %s: %w", path, err)

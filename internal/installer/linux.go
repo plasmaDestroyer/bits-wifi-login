@@ -55,15 +55,15 @@ var unsafePath = regexp.MustCompile("[\\s\"'`$\\\\;&|<>()\n]")
 
 func preflight(exe string) error {
 	if _, err := exec.LookPath("nmcli"); err != nil {
-		return errors.New("installer: NetworkManager (nmcli) not found — is this an NM-managed system?")
+		return errors.New("installer: NetworkManager (nmcli) not found. Is this an NM-managed system?")
 	}
 
 	if os.Geteuid() == 0 {
-		return errors.New("installer: do not run this with sudo — it will ask for your password when it needs root, and creds.conf must stay owned by you")
+		return errors.New("installer: do not run this with sudo, it asks for root itself")
 	}
 
 	if unsafePath.MatchString(exe) {
-		return fmt.Errorf("installer: refusing to install from %q — the path must not contain spaces or shell metacharacters. Move the binary somewhere plainer and re-run", exe)
+		return fmt.Errorf("installer: refusing to install from %q: the path must not contain spaces or shell metacharacters", exe)
 	}
 
 	return nil
@@ -83,7 +83,7 @@ func install(exe string) error {
 	logPath := filepath.Join(logDir, "dispatcher.log")
 
 	if unsafePath.MatchString(logPath) {
-		return fmt.Errorf("installer: refusing to use log path %q — it must not contain spaces or shell metacharacters", logPath)
+		return fmt.Errorf("installer: refusing to use log path %q: it must not contain spaces or shell metacharacters", logPath)
 	}
 
 	fmt.Println("Installing background triggers (sudo may prompt)...")
@@ -91,7 +91,7 @@ func install(exe string) error {
 	// Prime sudo first: sudoWrite uses stdin for content, so the password needs
 	// /dev/tty. Failing here beats a half install.
 	if err := run("sudo", "-v"); err != nil {
-		return errors.New("installer: sudo could not authenticate — run this straight from a terminal (it cannot prompt for a password through a pipe or an editor console)")
+		return errors.New("installer: sudo could not authenticate. Run this from a terminal")
 	}
 
 	if err := sudoWrite(dispatcherPath, dispatcher(exe, u.Username, logPath), "0755"); err != nil {
@@ -103,7 +103,7 @@ func install(exe string) error {
 		return err
 	}
 	if err := run("sudo", "systemctl", "reload", "NetworkManager"); err != nil {
-		fmt.Println("⚠ Could not reload NetworkManager — connectivity checking starts at next restart.")
+		fmt.Println("⚠ Could not reload NetworkManager. Connectivity checking starts at its next restart.")
 	}
 	// NM's probe can block for seconds. Let it run while the units go in.
 	verdict := make(chan string, 1)
@@ -158,11 +158,11 @@ func install(exe string) error {
 // that just worked. Returns its line instead of printing: it runs concurrently.
 func calibrateConnectivity() string {
 	if !portal.New().IsLoggedIn() {
-		return "⚠ Not online, so NM's connectivity check could not be verified — left as it was."
+		return "⚠ Not online, so NM's connectivity check could not be verified. Left as it was."
 	}
 
 	if err := setConnectivityCheck(true); err != nil {
-		return "⚠ Could not enable NM connectivity checking — the periodic timer is the only trigger."
+		return "⚠ Could not enable NM connectivity checking. The periodic timer is the only trigger."
 	}
 
 	// Bounded: a broken probe blocks ~10s. Slow IS the answer, too: a check
@@ -183,7 +183,7 @@ func calibrateConnectivity() string {
 		return "⚠ NM's connectivity check disagrees with the network and could not be turned back off."
 	}
 
-	return fmt.Sprintf("⚠ NM reports %q while the network is working — a VPN is most likely\n"+
+	return fmt.Sprintf("⚠ NM reports %q while the network is working. A VPN is most likely\n"+
 		"  intercepting NM's probe. Left off, so the periodic timer is the trigger.\n"+
 		"  Re-run `bits-wifi-login install` if you change your VPN setup.", state)
 }
@@ -269,7 +269,7 @@ func triggers() []Trigger {
 	// and a VPN added after install leaves it on but stuck.
 	name := "NM connectivity checking (the connectivity-change trigger)"
 	if verdict, err := runOut("nmcli", "networking", "connectivity"); err == nil {
-		name = fmt.Sprintf("%s — NM currently reports %q", name, strings.TrimSpace(verdict))
+		name = fmt.Sprintf("%s (NM currently reports %q)", name, strings.TrimSpace(verdict))
 	}
 
 	found = append(found, Trigger{Name: name, Registered: connectivityCheckEnabled()})
@@ -292,7 +292,7 @@ func summary() string {
 
 	if !connectivityCheckEnabled() {
 		drop = ""
-		timer = "    - Every 10 minutes (systemd timer) — the ONLY drop detection on this\n" +
+		timer = "    - Every 10 minutes (systemd timer). This is the only drop detection on this\n" +
 			"      machine, since NM's connectivity check is off\n"
 	}
 
@@ -303,9 +303,7 @@ func summary() string {
 		timer + "\n" +
 		"  Logs:\n" +
 		"    journalctl -u bits-wifi-login.service --since today\n" +
-		"    tail ~/.local/state/bits-wifi-login/dispatcher.log\n\n" +
-		"  Repair:\n" +
-		"    Re-run `bits-wifi-login install` if triggers or permissions break.\n"
+		"    tail ~/.local/state/bits-wifi-login/dispatcher.log\n"
 }
 
 // NM says "up" before the portal answers, so the dispatcher waits first.

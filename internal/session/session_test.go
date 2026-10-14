@@ -104,7 +104,7 @@ func TestLockIsExclusive(t *testing.T) {
 	}
 
 	if _, ok := Lock(path); ok {
-		t.Error("second Lock() = true, want false — two watchers would race to log in")
+		t.Error("second Lock() = true, want false: two watchers would race to log in")
 	}
 
 	release()

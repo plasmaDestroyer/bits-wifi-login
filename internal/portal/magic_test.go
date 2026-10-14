@@ -45,7 +45,7 @@ func TestFixtureLoginFailureIsCredentialRejection(t *testing.T) {
 	}
 
 	if !rejectRe.Match(body) {
-		t.Error("login_failure.html not matched by rejectRe — would be reported as an unexpected response")
+		t.Error("login_failure.html not matched by rejectRe, so it would be reported as an unexpected response")
 	}
 }
 

@@ -86,7 +86,7 @@ func (p *Portal) Login(c creds.Creds) (Session, error) {
 func rejectionError(body []byte, status int, password string) error {
 	reason := fmt.Sprintf("unexpected portal response (HTTP %d)", status)
 	if rejectRe.Match(body) {
-		reason = "portal rejected credentials — wrong username or password"
+		reason = "portal rejected credentials: wrong username or password"
 	}
 
 	path, err := dumpBody(redact(body, password))
@@ -94,7 +94,7 @@ func rejectionError(body []byte, status int, password string) error {
 		return fmt.Errorf("portal: %s", reason)
 	}
 
-	return fmt.Errorf("portal: %s (response saved to %s — attach when reporting a bug)", reason, path)
+	return fmt.Errorf("portal: %s (the response is saved to %s for bug reports)", reason, path)
 }
 
 func redact(body []byte, password string) []byte {
@@ -109,7 +109,7 @@ func redact(body []byte, password string) []byte {
 // with evidence instead of a shrug.
 func noMagicError(interceptBody []byte, status int, location string) error {
 	if len(interceptBody) == 0 {
-		return fmt.Errorf("portal: no magic token found — the probe returned HTTP %d with an empty body and Location %q. If a VPN is up (CloudflareWARP, Tailscale) it is tunnelling the probe past the captive portal; exclude %s from it", status, location, connectivityURL)
+		return fmt.Errorf("portal: no magic token found. The probe returned HTTP %d with an empty body and Location %q. If a VPN is up (Cloudflare WARP, Tailscale) it is tunnelling the probe past the captive portal. Exclude %s from the tunnel and from its DNS", status, location, connectivityURL)
 	}
 
 	path, err := dumpBody(interceptBody)
@@ -117,7 +117,7 @@ func noMagicError(interceptBody []byte, status int, location string) error {
 		return errors.New("portal: no magic token found")
 	}
 
-	return fmt.Errorf("portal: no magic token found (HTTP %d) — the probe response was saved to %s, attach it when reporting this", status, path)
+	return fmt.Errorf("portal: no magic token found (HTTP %d). The probe response is saved to %s for bug reports", status, path)
 }
 
 func dumpBody(body []byte) (string, error) {
