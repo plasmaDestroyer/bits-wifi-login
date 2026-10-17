@@ -13,6 +13,18 @@ It's one small Go binary and there's nothing else to install (on Linux it uses N
 curl -fsSL https://plasmaDestroyer.github.io/bits-wifi-login/install.sh | bash
 ```
 
+### ❄️ NixOS
+NixOS builds `/etc` from your config, so the installer can't drop files in there. Add the module to your flake instead:
+```nix
+# inputs
+bits-wifi-login.url = "github:plasmaDestroyer/bits-wifi-login";
+
+# in nixosSystem's modules list
+bits-wifi-login.nixosModules.default
+{ services.bits-wifi-login = { enable = true; user = "your-username"; }; }
+```
+Rebuild, then run the Linux one-liner above. It grabs the binary, asks for your creds, and sees that the triggers are already there. No flakes? Put `nix/module.nix` from this repo in your `imports`. To uninstall, set `enable = false` and rebuild.
+
 ### 🪟 Windows
 Open PowerShell and run this. If it says "Access is denied", reopen PowerShell as Administrator and run it again.
 ```powershell
