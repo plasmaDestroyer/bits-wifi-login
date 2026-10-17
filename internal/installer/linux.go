@@ -303,13 +303,15 @@ func uninstall() (int, error) {
 }
 
 // is-enabled, not status: a healthy oneshot reads "inactive". And judge the
-// word, not the exit code: "disabled" is correct for the timer-driven service.
+// word, not the exit code: "disabled" is correct for the timer-driven service,
+// and NixOS reports units from its config as "linked".
 func triggers() []Trigger {
 	found := make([]Trigger, 0, len(units)+2)
 
 	for _, unit := range units {
 		state, err := runOut("systemctl", "is-enabled", unit)
-		registered := err == nil || strings.TrimSpace(state) == "disabled"
+		state = strings.TrimSpace(state)
+		registered := err == nil || state == "disabled" || state == "linked"
 		found = append(found, Trigger{Name: unit, Registered: registered})
 	}
 
