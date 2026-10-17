@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -156,5 +157,21 @@ func TestConnectivityConfSetsResponseAlongsideURI(t *testing.T) {
 
 	if !strings.Contains(connectivityConf, "\nresponse=\n") {
 		t.Errorf("connectivityConf overrides uri without an empty response:\n%s", connectivityConf)
+	}
+}
+
+func TestNixOSHintNamesTheExecutableOnlyWhenNonDefault(t *testing.T) {
+	u := &user.User{Username: "alice", HomeDir: "/home/alice"}
+
+	got := nixOSHint("/home/alice/.local/share/bits-wifi-login/bits-wifi-login", u)
+	if !strings.Contains(got, `user = "alice";`) {
+		t.Errorf("nixOSHint() does not set the user:\n%s", got)
+	}
+	if strings.Contains(got, "executable") {
+		t.Errorf("nixOSHint() sets executable for the default path:\n%s", got)
+	}
+
+	if got := nixOSHint("/opt/bits-wifi-login", u); !strings.Contains(got, `executable = "/opt/bits-wifi-login";`) {
+		t.Errorf("nixOSHint() drops a non-default executable:\n%s", got)
 	}
 }

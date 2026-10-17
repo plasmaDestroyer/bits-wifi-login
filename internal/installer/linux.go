@@ -86,6 +86,10 @@ func install(exe string) error {
 		return fmt.Errorf("installer: refusing to use log path %q: it must not contain spaces or shell metacharacters", logPath)
 	}
 
+	if nixOS() {
+		return installNixOS(exe, u)
+	}
+
 	fmt.Println("Installing background triggers (sudo may prompt)...")
 
 	// Prime sudo first: sudoWrite uses stdin for content, so the password needs
@@ -152,6 +156,50 @@ func install(exe string) error {
 	return nil
 }
 
+// NixOS builds /etc from its config, read-only (2026-10-17), so the triggers
+// come from nix/module.nix and install only checks for them and calibrates.
+func nixOS() bool {
+	_, err := os.Stat("/etc/NIXOS")
+	return err == nil
+}
+
+func installNixOS(exe string, u *user.User) error {
+	if _, err := os.Stat(dispatcherPath); err != nil {
+		return errors.New(nixOSHint(exe, u))
+	}
+
+	fmt.Println("✓ Background triggers found in your NixOS config.")
+
+	if err := run("sudo", "-v"); err != nil {
+		return errors.New("installer: sudo could not authenticate. Run this from a terminal")
+	}
+
+	s := spin("Waiting for NetworkManager's connectivity check...")
+	s.done(calibrateConnectivity())
+
+	return nil
+}
+
+func nixOSHint(exe string, u *user.User) string {
+	settings := fmt.Sprintf("enable = true;\n        user = %q;", u.Username)
+	if exe != filepath.Join(u.HomeDir, ".local", "share", "bits-wifi-login", "bits-wifi-login") {
+		settings += fmt.Sprintf("\n        executable = %q;", exe)
+	}
+
+	return "installer: NixOS manages /etc itself, so the background triggers have to come\n" +
+		"  from your config. Add this repo's module, rebuild, then re-run `bits-wifi-login install`:\n\n" +
+		"    # flake.nix inputs\n" +
+		"    bits-wifi-login.url = \"github:plasmaDestroyer/bits-wifi-login\";\n\n" +
+		"    # nixosSystem modules\n" +
+		"    bits-wifi-login.nixosModules.default\n" +
+		"    {\n" +
+		"      services.bits-wifi-login = {\n" +
+		"        " + settings + "\n" +
+		"      };\n" +
+		"    }\n\n" +
+		"  Without flakes, add nix/module.nix from the repo to `imports` instead."
+}
+
 // Under a VPN, NM's own probe often can't get out (2026-08-28): NM then calls a
 // working network broken and, stuck there, never fires the transition this
 // trigger needs. So enable, ask NM, and keep it only if NM agrees with a probe
@@ -214,6 +262,11 @@ func setConnectivityCheck(on bool) error {
 }
 
 func uninstall() (int, error) {
+	if nixOS() {
+		return 0, errors.New("installer: on NixOS the background triggers live in your config.\n" +
+			"  Set services.bits-wifi-login.enable = false (or drop the module) and rebuild")
+	}
+
 	removed := 0
 
 	// Disable unconditionally so stale symlinks go too. run, not runOut: don't
@@ -311,7 +364,7 @@ func summary() string {
 //
 // Readiness = curl's exit status, NOT the HTTP status: an intercepted probe
 // answers 200 with the fgtauth page, so waiting for 204/302 never matched in
-// the one state worth logging in from.
+// the one state worth logging in from. nix/module.nix has a copy: keep in step.
 func dispatcher(exe, username, logPath string) string {
 	return fmt.Sprintf(`#!/usr/bin/env bash
 CURRENT_SSID=$(nmcli -t -f active,ssid dev wifi 2>/dev/null | grep '^yes' | cut -d: -f2)
